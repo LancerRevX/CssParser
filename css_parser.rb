@@ -1,107 +1,61 @@
 require 'optparse'
 
+require_relative 'element'
+require_relative 'basic_elements'
+require_relative 'complex_elements'
+
 OptionParser.new do |options|
   options.banner = 'Usage'
 end
 
 module Css
+  
+
+
+  #   while (source.length > 0)
+  #     begin
+  #       element_classes.each do |element_class|
+  #         element = element_class.parse(source)
+  #         break if element
+  #       end
+  #     rescue ParseError => parse_error
+  #       raise ParseError.new(source, parsed_length + parse_error.start_pos, parsed_length + parse_error.end_pos), parse_error.message
+  #     end
+
+  #     if element.nil?
+  #       raise ParseError.new(source, parsed_length, source.length - 1), %Q/Couldn't parse element/
+  #     end
+
+  #     elements.push element
+  #     source.slice!(0...element.length)
+  #     parsed_length += element.length
+
+  #     if element.is_a?(final_element)
+  #       break
+  #     end
+  #   end
+  #   return elements
+  # end
+
   class Project
 
   end
 
-  class Element
-    attr_accessor :source
-    attr_reader :elements
 
-    def initialize(source)
-      @elements = []
-      self.source = source
-    end
 
-    def source=(source)
-      @source = source
-      parse if defined? parse
-    end
-
-    def length
-      @source.length
-    end
-
-    # def to_s(depth=0)
-    #   result = ''
-    #   if @elements.length > 0
-    #     result += "\t" * (depth) + self.class.name + " {\n"
-    #     @elements.each do |element|
-    #       result += "\t" * (depth + 1) + element.to_s + "\n"
-    #     end
-    #     result += "\t" * (depth) + "}"
-    #   else
-    #     result += self.class.name + " { " + (defined? text ? text : source) + " }"
-    #   end
-    #   result
-    # end
-
-    private
-
-    def parse_elements(optional_elements, required_elements)
-      @elements = []
-      source = @source.dup
-      remaining_required = required_elements.dup
-      while (source.length > 0)
-        element = parse_element(source, optional_elements)
-        if element.nil? and remaining_required.length > 0
-          element = parse_element(source, [remaining_required.shift])
-        end
-
-        if element.nil?
-          raise ParseError.new(@source, parsed_length, source.length - 1), %Q/Couldn't parse element/
-        end
-
-        @elements.push element
-        source.slice!(0...element.length)
-
-        if required_elements.length > 0 and remaining_required.length == 0
-          break
-        end
-      end
-
-      missing_required = required_elements - @elements.intersection(required_elements)
-      if missing_required.length > 0
-        raise ParseError.new(@source, 0, source.length - 1), %Q/Couldn't find element "#{missing_required.first.name}"/
-      end
-    end
-
-    def parse_element(source, element_classes)
-      begin
-        element_classes.each do |element_class|
-          element = element_class.from_source(source)
-          break if element
-        end
-      rescue ParseError => parse_error
-        raise ParseError.new(@source, parsed_length + parse_error.start_pos, parsed_length + parse_error.end_pos), parse_error.message
-      end
-    end
-
-    def parsed_length
-      @elements.map(&:length).sum
-    end
-  end
-
-  class File < Element
+  class File < CombinedElement
 
     def self.open(path)
       file = ::File.open(path)
       Css::File.new(file.read)
     end
 
-    def vars
-      
+    def self.parse(source)
+      self.new(parse_elements [Space, Comment, RuleSet])
     end
 
-    private    
-
-    def parse
-      parse_elements [Space, Comment, RuleSet]
+    def vars
+      
     end
 
     # def parse_comments
@@ -163,63 +117,6 @@ module Css
     #     raise Error(), 
     #   end
     # end
-  end
-
-  
-
-  class Space < Element
-    def self.from_source(source)
-      if source.match(/^\s+/)
-        Space.new(Regexp.last_match(0))
-      end
-    end
-  end
-
-  class Comment < Element
-    attr_accessor :text
-
-    def initialize(source)
-      super
-      @text = source.gsub(/\/\*|\*\//, '')
-    end
-
-    def Comment.from_source(source)
-      return nil unless source.start_with?('/*')
-
-      (2...source.length).each do |char_i|
-        word = source[char_i..(char_i + 1)]
-        if word == '*/'
-          return Comment.new(source[0..(char_i+1)])
-        end
-      end
-
-      raise ParseError.new(source, 0, 1), %Q(Unmatched "/*")
-    end
-  end
-
-  class RuleSet < Element
-    def self.from_source(source)
-      return nil unless source.match(/^\S+/)
-    end
-
-    def parse
-      parse_elements [Space, Comment], [Selector, DeclarationBlock]
-    end
-  end
-
-  class Selector < Element
-    def self.from_source(source)
-      return nil unless source.match(/^\S+/)
-
-      (0...source.length).each do |char_i|
-        char = source[char_i]
-        
-      end
-    end
-  end
-
-  class DeclarationBlock < Element
-
   end
 
   class ParseError < RuntimeError
