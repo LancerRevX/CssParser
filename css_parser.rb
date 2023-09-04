@@ -4,10 +4,6 @@ require_relative 'element'
 require_relative 'basic_elements'
 require_relative 'complex_elements'
 
-OptionParser.new do |options|
-  options.banner = 'Usage'
-end
-
 module Css
   
 
@@ -51,7 +47,11 @@ module Css
     end
 
     def self.parse(source)
-      self.new(parse_elements [Space, Comment, RuleSet])
+      self.new(Css.parse_elements source, [
+        ElementDeclaration.new(element_class: SpaceOrComment, optional: true, many: true),
+        ElementDeclaration.new(element_class: RuleSet, optional: true, many: true),
+        ElementDeclaration.new(element_class: SpaceOrComment, optional: true, many: true),
+      ])
     end
 
     def vars
@@ -132,5 +132,13 @@ module Css
         @start_pos = @end_pos = pos.first
       end
     end
+
+    # def to_s
+    #   printf(
+    #     "at #@start_pos: %s > %s < %s", 
+    #     @source[[@start_pos-16, 0].max...@start_pos], 
+    #     @source[@start_pos..@end_pos], 
+    #     @source[[@end_pos+1, @source.length].min...[@end_pos+16, @source.length].min])
+    # end
   end
 end

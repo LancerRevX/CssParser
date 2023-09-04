@@ -6,10 +6,10 @@ module Css
 
   class RuleSet < CombinedElement
     def RuleSet.parse(source)
-      elements = parse_elements(source, [
-        ElementDeclaration.new(Selector),
-        ElementDeclaration.new(SpaceOrComment, optional: true, many: true),
-        ElementDeclaration.new(DeclarationBlock)
+      elements = Css.parse_elements(source, [
+        ElementDeclaration.new(element_class: Selector),
+        ElementDeclaration.new(element_class: SpaceOrComment, optional: true, many: true),
+        ElementDeclaration.new(element_class: DeclarationBlock)
       ])
 
       return RuleSet.new(elements) if elements
@@ -18,10 +18,10 @@ module Css
 
   class Selector < CombinedElement
     def Selector.parse(source)
-      elements = parse_elements(source, [
-        ElementDeclaration.new(SelectorItem),
-        ElementDeclaration.new(SpaceOrComment, optional: true, many: true),
-        ElementDeclaration.new(SelectorTail, optional: true, many: true)
+      elements = Css.parse_elements(source, [
+        ElementDeclaration.new(element_class: SelectorItem),
+        ElementDeclaration.new(element_class: SpaceOrComment, optional: true, many: true),
+        ElementDeclaration.new(element_class: SelectorTail, optional: true, many: true)
       ])
 
       return Selector.new(elements) if elements
@@ -30,10 +30,10 @@ module Css
 
   class SelectorTail < CombinedElement
     def SelectorTail.parse(source)
-      elements = parse_elements(source, [
-        ElementDeclaration.new(Comma),
-        ElementDeclaration.new(SpaceOrComment, optional: true, many: true),
-        ElementDeclaration.new(SelectorItem)
+      elements = Css.parse_elements(source, [
+        ElementDeclaration.new(element_class: Comma),
+        ElementDeclaration.new(element_class: SpaceOrComment, optional: true, many: true),
+        ElementDeclaration.new(element_class: SelectorItem)
       ])
 
       return SelectorTail.new(elements) if elements
@@ -43,12 +43,12 @@ module Css
 
   class DeclarationBlock < CombinedElement
     def DeclarationBlock.parse(source)
-      elements = parse_elements(source, [
-        ElementDeclaration.new(DeclarationBlockStart),
-        ElementDeclaration.new(SpaceOrComment, optional: true, many: true),
-        ElementDeclaration.new(Declaration, optional: true, many: true),
-        ElementDeclaration.new(SpaceOrComment, optional: true, many: true),
-        ElementDeclaration.new(DeclarationBlockEnd)
+      elements = Css.parse_elements(source, [
+        ElementDeclaration.new(element_class: DeclarationBlockStart),
+        ElementDeclaration.new(element_class: SpaceOrComment, optional: true, many: true),
+        ElementDeclaration.new(element_class: Declaration, optional: true, many: true),
+        ElementDeclaration.new(element_class: SpaceOrComment, optional: true, many: true),
+        ElementDeclaration.new(element_class: DeclarationBlockEnd)
       ])
 
       return DeclarationBlock.new(elements) if elements
@@ -57,15 +57,15 @@ module Css
 
   class Declaration < CombinedElement
     def Declaration.parse(source)
-      elements = parse_elements(source, [
-        ElementDeclaration.new(Property),
-        ElementDeclaration.new(SpaceOrComment, optional: true, many: true),
-        ElementDeclaration.new(Colon),
-        ElementDeclaration.new(SpaceOrComment, optional: true, many: true),
-        ElementDeclaration.new(Value),
-        ElementDeclaration.new(SpaceOrComment, optional: true, many: true),
-        ElementDeclaration.new(Semicolon),
-        ElementDeclaration.new(SpaceOrComment, optional: true, many: true),
+      elements = Css.parse_elements(source, [
+        ElementDeclaration.new(element_class: Property),
+        ElementDeclaration.new(element_class: SpaceOrComment, optional: true, many: true),
+        ElementDeclaration.new(element_class: Colon),
+        ElementDeclaration.new(element_class: SpaceOrComment, optional: true, many: true),
+        ElementDeclaration.new(element_class: Value),
+        ElementDeclaration.new(element_class: SpaceOrComment, optional: true, many: true),
+        ElementDeclaration.new(element_class: Semicolon),
+        ElementDeclaration.new(element_class: SpaceOrComment, optional: true, many: true),
       ])
 
       return Declaration.new(elements) if elements

@@ -4,9 +4,12 @@ module Css
     elements = []
     parsed_length = 0
     element_declarations.each do |element_declaration|
+      if not element_declaration.optional and source.length == 0
+        return nil
+      end
       element = element_declaration.element_class.parse(source)
       if element.nil?
-        unless element.optional
+        unless element_declaration.optional
           return nil
         else
           next
@@ -23,28 +26,24 @@ module Css
         end
       end
     end
+    elements
   end
   
   class Element
     attr_accessor :source
 
-    def initialize(source, *pos)
+    def initialize(source)
       @source = source
-      if pos.length == 2
-        @start_pos = pos[0]
-        @end_pos = pos[1]
-      elsif pos.length == 1
-        @start_pos = @end_pos = pos.first
-      end
     end
 
     def length
       @source.length
     end
 
-    # def to_s(depth=0)
-
-    # end
+    def to_s(depth=0)
+      result = "\t" * depth
+      result += self.class.name + %Q( { ") + (defined?(@text) ? @text : @source) + %Q(" })
+    end
 
     # def to_s(depth=0)
     #   result = ''
@@ -109,13 +108,27 @@ module Css
   class CombinedElement < Element
     attr_reader :elements
 
-    def initialize(elements, pos)
-      super(nil, pos)
+    def initialize(elements)
+      super(nil)
       @elements = elements
     end
 
     def source 
       @elements.map(&:source).join
+    end
+
+    def to_s(depth=0)
+      result = ''
+      if @elements.length > 0
+        result += "\t" * (depth) + self.class.name + " {\n"
+        @elements.each do |element|
+          result += "\t" * (depth + 1) + element.to_s + "\n"
+        end
+        result += "\t" * (depth) + "}"
+      else
+        result += self.class.name + " { }"
+      end
+      result
     end
   end
 end

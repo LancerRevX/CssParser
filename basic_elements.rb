@@ -93,6 +93,8 @@ module Css
         word = source[char_i..(char_i + 1)]
         if word == '*/'
           return Comment.new(source[0..(char_i+1)], text)
+        elsif word == '/*'
+          raise ParseError.new(source, char_i, char_i+1), %Q(Nested comment)
         else
           text += char
         end
