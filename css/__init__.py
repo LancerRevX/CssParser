@@ -17,6 +17,10 @@ class Source:
     def current_pos(self):
         return self.pos
     
+    @property
+    def tail(self):
+        return self.text[self.pos:]
+    
     def move(self, chars_number: int):
         self.pos += chars_number
 
@@ -32,7 +36,7 @@ class Element(ABC):
 
     @property
     @abstractmethod
-    def source(self):
+    def source_text(self):
         pass
     
     @abstractmethod
@@ -49,11 +53,11 @@ class ElementDeclaration:
 
 
 class BasicElement(Element):
-    def __init__(self, source: str):
-        self._source = source
+    def __init__(self, source_text: str):
+        self._source = source_text
 
     @property
-    def source(self):
+    def source_text(self):
         return self._source
 
     def __len__(self):
@@ -62,8 +66,8 @@ class BasicElement(Element):
 
 class RegexElement(BasicElement):
     @classmethod
-    def parse(cls, source: str, start_pos: int):
-        match = re.match(cls.regex(), source)
+    def parse(cls, source: Source):
+        match = re.match(cls.regex(), source.tail)
         if match:
             return cls(match.group)
         else:
@@ -109,8 +113,8 @@ class ComplexElement(Element):
                 
 
     @property
-    def source(self):
-        return ''.join(map(lambda element: element.source, self.elements))
+    def source_text(self):
+        return ''.join(map(lambda element: element.source_text, self.elements))
     
     def __len__(self):
         return sum(map(lambda el: len(el), self.elements))
@@ -156,7 +160,7 @@ class RuleSet(ComplexElement):
 
 class File(ComplexElement):
     def __init__(self, source_text: str):
-        self.source = Source(source_text)
+        self.source_text = Source(source_text)
 
     @classmethod
     def open(file_path: str):
