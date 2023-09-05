@@ -21,6 +21,8 @@ class Source:
     def tail(self):
         return self.text[self.pos:]
     
+    def parse_element()
+    
     def move(self, chars_number: int):
         self.pos += chars_number
 
@@ -46,10 +48,10 @@ class Element(ABC):
 
 
 @dataclass
-class ElementDeclaration:
-    element_class: Type[Element]
+class ElementDefinition:
+    element: Type[Element] | list[ElementDefinition]
     required: bool
-    many: bool
+    single: bool
 
 
 class BasicElement(Element):
@@ -88,6 +90,26 @@ class Comma(RegexElement):
     @staticmethod
     def regex():
         return r','
+    
+class Colon(RegexElement):
+    @staticmethod
+    def regex():
+        return r':'
+    
+class Semicolon(RegexElement):
+    @staticmethod
+    def regex():
+        return r';'
+    
+class BlockStart(RegexElement):
+    @staticmethod
+    def regex():
+        return r'{'
+    
+class BlockEnd(RegexElement):
+    @staticmethod
+    def regex():
+        return r'}'
 
 
 class ComplexElement(Element):
@@ -121,7 +143,12 @@ class ComplexElement(Element):
     
     @staticmethod
     @abstractmethod
-    def element_declarations() -> list[ElementDeclaration]:
+    def element_declarations() -> list[ElementDefinition]:
+        pass
+
+    @staticmethod
+    @abstractmethod
+    def regex() -> re.Pattern:
         pass
 
     @property
@@ -135,28 +162,96 @@ class Comment(BasicElement):
     def parse(cls, source: str, start_pos: int):
         if not re.match('^/\*'):
             return None
+        
+            
+class CommentStart(RegexElement):
+    @staticmethod
+    def regex():
+        return r'/\*'
+    
+class CommentEnd(RegexElement):
+    @staticmethod
+    def regex():
+        return r'\*/'
+    
+class CommentText(BasicElement):
+    @classmethod
+    def parse(cls, source: Source) -> CommentText | None:
         text = ''
         for i in range(start_pos, len(source) - 1):
             word = source[i:i+2]
-            if word == '*/':
-                return cls(source[0:i+2], text)
-            elif word == '/*':
-                raise ParseError()
+            if word == CommentEnd.regex():
+                break
+            text += source[i]
+        return cls(text)
+    
+class Comment(ComplexElement):
+    @staticmethod
+    def element_declarations() -> list[ElementDefinition]:
+        return [
+            ElementDefinition(CommentStart, required=True, single=True),
+            ElementDefinition(CommentText, required=False, single=True),
+            ElementDefinition(CommentEnd, required=True, single=True)
+        ]
+    
+    @property
+    def text(self):
+        if isinstance(self.elements[1], CommentText):
+            return self.elements[1].source_text
+        else:
+            return ''
             
-class SpaceOrComment(BasicElement):
-    @classmethod
-    def parse(cls, source: Source):
-        return Space.parse(source) or Comment.parse(source)
+SPACES_AND_COMMENTS = ElementDefinition([
+    ElementDefinition(Space), 
+    ElementDefinition(Comment)
+], required=False, single=False)
+    
+class Selector(ComplexElement):
+    @staticmethod
+    def element_declarations() -> list[ElementDefinition]:
+        return [
+            ElementDefinition(SelectorItem, required=True, single=True),
+            ElementDefinition([
+                ElementDefinition(Comma, required=True, single=True),
+                ElementDefinition(SelectorItem, required=True, single=True)
+            ], required=False, single=False)
+        ]
+class DeclarationBlock(ComplexElement):
+    @staticmethod
+    def element_declarations() -> list[ElementDefinition]:
+        return [
+            ElementDefinition(BlockStart, required=True, single=True),
+            SPACES_AND_COMMENTS,
+            ElementDefinition(Declaration, required=False, single=True),
+            SPACES_AND_COMMENTS,
+            ElementDefinition([
+                ElementDefinition(Semicolon, required=True, single=True),
+                SPACES_AND_COMMENTS,
+                ElementDefinition(Declaration, required=True, single=True),
+                SPACES_AND_COMMENTS,
+            ], required=False, single=False),
+            ElementDefinition(BlockEnd, required=True, single=True)
+        ]
+    
+    @property
+    def vars(self):
+        vars = []
+        for element in self.elements:
+            if isinstance(element, Declaration) and element.is_var():
+                vars.append(element)
+        return vars
             
 class RuleSet(ComplexElement):
     @staticmethod
-    def element_declarations() -> list[ElementDeclaration]:
+    def element_declarations() -> list[ElementDefinition]:
         return [
-            ElementDeclaration(element_class=SpaceOrComment,
-                               required=False,
-                               many=True)
+            ElementDefinition(Selector, required=True, single=True),
+            ElementDefinition([
+                ElementDefinition(Space), 
+                ElementDefinition(Comment)
+            ], required=False, single=False),
+            ElementDefinition(DeclarationBlock, required=True, single=True),
         ]
-                
 
 class File(ComplexElement):
     def __init__(self, source_text: str):
@@ -167,15 +262,13 @@ class File(ComplexElement):
         pass
 
     @staticmethod
-    def element_declarations() -> list[ElementDeclaration]:
-        return [
-            ElementDeclaration(element_class=SpaceOrComment,
-                               required=False,
-                               many=True),
-            ElementDeclaration(element_class=RuleSet,
-                               required=False,
-                               many=True),
-            ElementDeclaration(element_class=SpaceOrComment,
-                               required=False,
-                               many=True)
-        ]
+    def element_declarations() -> list[ElementDefinition]:
+        return {
+            {
+                {
+                    Space: {}, 
+                    Comment: {}
+                }: {'repeat': True},
+                RuleSet: {}
+            }: {'repeat': True}
+        }
