@@ -1,5 +1,5 @@
-import css
+import css_parser
 
-f = css.File()
+element = css_parser.File.parse('/*abc*/ ')
 
-print(f)
+print(element)
