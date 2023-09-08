@@ -8,33 +8,32 @@ from universal_parser import (
 
 
 class Space(RegexElement):
-    regex = r'\s+'
+    REGEX = r'\s+'
 
 
 class Comma(RegexElement):
-    regex = r','
+    REGEX = r','
 
 
 class Colon(RegexElement):
-    regex = r':'
+    REGEX = r':'
 
 
 class Semicolon(RegexElement):
-    regex = r';'
+    REGEX = r';'
 
 
 class PlainText(RegexElement):
-    regex = r'.*'
+    REGEX = r'.*'
 
 
 class Comment(BlockElement):
-    def get_element_definitions():
-        return [
-            ElementDefinition(PlainText, required=False, single=True)
-        ]
+    ELEMENT_DEFINITIONS = [
+        ElementDefinition(PlainText, required=False, single=True)
+    ]
 
-    start_str = '/*'
-    end_str = '*/'
+    START_STR = '/*'
+    END_STR = '*/'
 
 
 SPACES_AND_COMMENTS = ElementDefinition([
@@ -44,34 +43,75 @@ SPACES_AND_COMMENTS = ElementDefinition([
 
 
 class SelectorItem(RegexElement):
-    regex = r'[][ ^<>()\w-]+'
+    REGEX = r'[][ ^<>()\w-]+'
 
 
 class Selector(ListElement):
-    element_class = SelectorItem
-    delimeter = ','
+    ELEMENT_CLASS = SelectorItem
+    DELIMETER = ','
+
+
+class Property(RegexElement):
+    REGEX = r'[-a-zA-Z]+'
+
+
+
+
+class ValueText(RegexElement):
+    REGEX = r'[-\w ,]+'
+
+
+class ValueTextParentheses(RegexElement):
+    REGEX = r'[-\w; ,]+'
+
+
+class ParenthesesGroup(BlockElement):
+    START_STR = '('
+    END_STR = ')'
+
+    ELEMENT_DEFINITIONS = [
+        ElementDefinition([
+            ElementDefinition(ValueText, required=False, single=True),
+        ], required=True, single=False)
+    ]
+
+
+class Value(ComplexElement):
+    ELEMENT_DEFINITIONS = [
+        ElementDefinition([
+            ElementDefinition(ValueText, required=False, single=True),
+            ElementDefinition(ParenthesesGroup, required=False, single=True),
+            ElementDefinition(ValueText, required=False, single=True),
+        ], required=True, single=False)
+    ]
 
 
 class Declaration(ComplexElement):
-    def get_element_definitions():
-        return [
-
-        ]
+    ELEMENT_DEFINITIONS = [
+        SPACES_AND_COMMENTS,
+        ElementDefinition(Property, required=True, single=True),
+        SPACES_AND_COMMENTS,
+        ElementDefinition(Colon, required=True, single=True),
+        SPACES_AND_COMMENTS,
+        ElementDefinition(Value, required=True, single=True),
+        SPACES_AND_COMMENTS
+    ]
 
 
 class DeclarationList(ListElement):
-    element_class = Declaration
-    delimeter = ';'
+    ELEMENT_CLASS = Declaration
+    DELIMETER = ';'
 
 
 class DeclarationBlock(BlockElement):
-    start_str = '{'
-    end_str = '}'
+    START_STR = '{'
+    END_STR = '}'
 
-    def get_element_definitions():
-        return [
-            ElementDefinition(DeclarationList, required=False, single=True)
-        ]
+    ELEMENT_DEFINITIONS = [
+        SPACES_AND_COMMENTS,
+        ElementDefinition(DeclarationList, required=False, single=True),
+        SPACES_AND_COMMENTS
+    ]
 
     @property
     def vars(self):
@@ -83,19 +123,17 @@ class DeclarationBlock(BlockElement):
 
 
 class RuleSet(ComplexElement):
-    def get_element_definitions():
-        return [
-            ElementDefinition(Selector, required=True, single=True),
-            SPACES_AND_COMMENTS,
-            ElementDefinition(DeclarationBlock, required=True, single=True),
-        ]
+    ELEMENT_DEFINITIONS = [
+        ElementDefinition(Selector, required=True, single=True),
+        SPACES_AND_COMMENTS,
+        ElementDefinition(DeclarationBlock, required=True, single=True),
+    ]
 
 
 class File(universal_parser.File):
-    def get_element_definitions():
-        return [
-            ElementDefinition([
-                SPACES_AND_COMMENTS,
-                ElementDefinition(RuleSet, required=False, single=False)
-            ], required=False, single=False),
-        ]
+    ELEMENT_DEFINITIONS = [
+        ElementDefinition([
+            SPACES_AND_COMMENTS,
+            ElementDefinition(RuleSet, required=False, single=False)
+        ], required=False, single=False),
+    ]

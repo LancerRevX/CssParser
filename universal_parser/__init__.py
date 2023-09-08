@@ -25,7 +25,7 @@ class Element(ABC):
 
 
 class ParseError(RuntimeError):
-    def __init__(self, element_class: type[Element], message: str, source_text: str, pos: tuple[int, int] | int = None):
+    def __init__(self, element_class: type[Element], message: str, source_text: str, pos: tuple[int, int] | int | None = None):
         super().__init__()
 
         if pos is None:
@@ -40,7 +40,16 @@ class ParseError(RuntimeError):
         self.element_class = element_class
 
     def __str__(self) -> str:
-        return f'Error while parsing element "{self.element_class.__name__}": {self.message}'
+        result = f'Error while parsing element "{self.element_class.__name__}": {self.message}'
+        source_excerpt = self.source_text[max(0, self.pos[0] - 16):self.pos[1] + 16]
+        result += source_excerpt + '\n'
+        cursor_pos_start = 16 + min(0, self.pos[0] - 16)
+        cursor_pos_end = len(source_excerpt) - max(16, self.pos[1] + 16 - len(self.source_text))
+        result += ' ' * cursor_pos_start
+        result += '^' * (cursor_pos_end - cursor_pos_start + 1)
+        result += ' ' * (len(source_excerpt) - cursor_pos_end)
+        result += '\n'
+        return result
 
 
 @dataclass
@@ -62,22 +71,21 @@ class BasicElement(Element):
         return len(self._source)
     
     def __repr__(self, depth=0) -> str:
-        return '\t' * depth + self.__class__.__name__ + ': { "' + self._source + '" }'
+        return '\t' * depth + self.__class__.__name__ + ': { "' + self._source.replace('\n', '\\n').replace('  ', '') + '" }'
 
 
 class RegexElement(BasicElement):
     @classmethod
     def parse(cls, source_text: str) -> Self | None:
-        match = re.match('^' + cls.regex, source_text)
+        if len(source_text) == 0:
+            return None
+        match = re.match('^' + cls.REGEX, source_text)
         if match:
             return cls(match.group())
         else:
             return None
 
-    @property
-    @abstractmethod
-    def regex() -> str:
-        pass
+    REGEX: str
 
 
 class ComplexElement(Element):
@@ -88,7 +96,7 @@ class ComplexElement(Element):
     def parse(cls, source_text: str) -> Self | None:
         if len(source_text) == 0:
             return None
-        elements = cls.parse_by_definitions(source_text, cls.get_element_definitions())
+        elements = cls.parse_by_definitions(source_text, cls.ELEMENT_DEFINITIONS)
         if elements is None:
             return None
         else:
@@ -100,20 +108,22 @@ class ComplexElement(Element):
         parsed_length = 0
         for i, definition in enumerate(definitions):
             
-            elements = cls.parse_by_definition(source_text, definition)
+            elements = cls.parse_by_definition(source_text[parsed_length:], definition)
 
             if elements is None:
                 if definition.required:
                     if i == 0:
                         return None
                     else:
-                        raise ParseError(cls, f'Expected element {definition.element}', source_text, parsed_length)
+                        raise ParseError(cls, f'Expected element "{definition.element}"', source_text, parsed_length)
                 else:
                     continue
             else:
                 result_elements += elements
                 parsed_length += sum(map(len, elements))
         
+        if len(result_elements) == 0:
+            return None
         return result_elements
     
     @classmethod
@@ -173,12 +183,9 @@ class ComplexElement(Element):
         return ''.join(map(lambda element: element.source_text, self.elements))
 
     def __len__(self):
-        return sum(map(lambda el: len(el), self.elements))
+        return sum(map(len, self.elements))
 
-    @staticmethod
-    @abstractmethod
-    def get_element_definitions() -> list[ElementDefinition]:
-        pass
+    ELEMENT_DEFINITIONS: list[ElementDefinition]
 
     def __repr__(self, depth=0) -> str:
         result = '\t' * depth + self.__class__.__name__ + ': {'
@@ -195,37 +202,37 @@ class ComplexElement(Element):
 
 # универсальный интерфейс для поиска групп, ограниченных скобками
 class BlockElement(ComplexElement):
-    start_str = None
-    end_str = None
+    START_STR: str
+    END_STR: str
 
     @classmethod
     def parse(cls, source_text: str) -> Self | None:
-        if not source_text.startswith(cls.start_str):
+        if not source_text.startswith(cls.START_STR):
             return None
         nested_delimiter = 0
         content = ''
-        i = len(cls.start_str)
+        i = len(cls.START_STR)
         while i < len(source_text):
-            if source_text[i:].startswith(cls.start_str):
+            if source_text[i:].startswith(cls.START_STR):
                 nested_delimiter += 1
-            elif source_text[i:].startswith(cls.end_str):
+            elif source_text[i:].startswith(cls.END_STR):
                 if nested_delimiter > 0:
                     nested_delimiter -= 1
                 else:
-                    inside_elements = ComplexElement.parse_by_definitions(content, cls.get_element_definitions())
-                    return cls(inside_elements)
+                    inside_elements = ComplexElement.parse_by_definitions(content, cls.ELEMENT_DEFINITIONS)
+                    return cls(inside_elements if inside_elements else [])
 
             content += source_text[i]
             i += 1
         
-        raise ParseError(cls, f'Unmatched block delimeter "{cls.start_str}"', source_text, (0, len(cls.start_str)))
+        raise ParseError(cls, f'Unmatched block delimeter "{cls.START_STR}"', source_text, (0, len(cls.START_STR)))
     
     def __len__(self):
-        return len(self.start_str) + super(BlockElement, self).__len__() + len(self.end_str)
+        return len(self.START_STR) + super(BlockElement, self).__len__() + len(self.END_STR)
     
     @property
     def source_text(self):
-        return self.start_str + super(BlockElement, self).source_text + self.end_str
+        return self.START_STR + super(BlockElement, self).source_text + self.END_STR
     
     @property
     def content(self):
@@ -237,15 +244,12 @@ class ListElement(ComplexElement):
     def get_element_definitions() -> list[ElementDefinition]:
         return []
 
-    @property
-    @abstractmethod
-    def delimeter():
-        pass
+    DELIMETER: str
+    ELEMENT_CLASS: type[Element]
 
-    @property
-    @abstractmethod
-    def element_class() -> type[Element]:
-        pass
+    def __init__(self, elements: list[Element], delimeter_positions: list[int]):
+        super(ListElement, self).__init__(elements)
+        self.delimeter_positions = delimeter_positions
 
     @classmethod
     def parse(cls, source_text: str) -> Self | None:
@@ -253,16 +257,15 @@ class ListElement(ComplexElement):
         elements = []
         delimeter_positions = []
         while True:
-            if source_text[i:].startswith(cls.delimeter):
-                i += len(cls.delimeter)
+            if source_text[i:].startswith(cls.DELIMETER):
+                i += len(cls.DELIMETER)
                 delimeter_positions.append(len(elements))
                 continue
             else:
-                element = cls.element_class.parse(source_text[i:])
+                element = cls.ELEMENT_CLASS.parse(source_text[i:])
                 if element is None:
                     if len(elements) > 0:
-                        list_element = cls(elements)
-                        list_element.delimeter_positions = delimeter_positions
+                        list_element = cls(elements, delimeter_positions)
                         return list_element
                     else:
                         return None
@@ -279,4 +282,4 @@ class File(ComplexElement):
     def open(cls, file_path: str):
         with open(file_path, 'w') as file:
             source_text = file.read()
-            return cls(source_text)
+            return cls.from_text(source_text)
