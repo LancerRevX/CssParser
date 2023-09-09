@@ -1,9 +1,12 @@
 import css_parser
 
 element = css_parser.File.parse('''
+    /* Hello! */
     selector {
-        property: value;
-    }
+        property: val;
+        new-property: group(va;lue)value;
+    };
 ''')
 
-print(element)
+if element:
+    print(element)

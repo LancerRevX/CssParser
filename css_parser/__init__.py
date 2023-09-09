@@ -35,6 +35,9 @@ class Comment(BlockElement):
     START_STR = '/*'
     END_STR = '*/'
 
+    def __repr__(self, depth=0) -> str:
+        return '\t' * depth + self.__class__.__name__ + ': /*' + self.content + '*/'
+
 
 SPACES_AND_COMMENTS = ElementDefinition([
     ElementDefinition(Space, required=False, single=False),
@@ -43,7 +46,7 @@ SPACES_AND_COMMENTS = ElementDefinition([
 
 
 class SelectorItem(RegexElement):
-    REGEX = r'[][ ^<>()\w-]+'
+    REGEX = r'[][ ^<>()\w-]*[][^<>()\w-]+'
 
 
 class Selector(ListElement):
@@ -71,7 +74,7 @@ class ParenthesesGroup(BlockElement):
 
     ELEMENT_DEFINITIONS = [
         ElementDefinition([
-            ElementDefinition(ValueText, required=False, single=True),
+            ElementDefinition(ValueTextParentheses, required=False, single=True),
         ], required=True, single=False)
     ]
 
@@ -84,6 +87,9 @@ class Value(ComplexElement):
             ElementDefinition(ValueText, required=False, single=True),
         ], required=True, single=False)
     ]
+
+    def __repr__(self, depth=0) -> str:
+        return '\t' * depth + self.__class__.__name__ + ': "' + self.source_text + '"'
 
 
 class Declaration(ComplexElement):
@@ -137,3 +143,7 @@ class File(universal_parser.File):
             ElementDefinition(RuleSet, required=False, single=False)
         ], required=False, single=False),
     ]
+
+    @property
+    def comments(self):
+        return self.get_elements_of_type(Comment, recursive=True)

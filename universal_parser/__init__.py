@@ -22,6 +22,10 @@ class Element(ABC):
     @abstractmethod
     def __repr__(self, depth) -> str:
         pass
+    
+    @abstractmethod
+    def get_elements_of_type(self, element_class: type[Self], *, recursive: bool) -> list[Self]:
+        pass
 
 
 class ParseError(RuntimeError):
@@ -40,7 +44,7 @@ class ParseError(RuntimeError):
         self.element_class = element_class
 
     def __str__(self) -> str:
-        result = f'Error while parsing element "{self.element_class.__name__}": {self.message}'
+        result = f'Error while parsing element "{self.element_class.__name__}": {self.message}\n'
         source_excerpt = self.source_text[max(0, self.pos[0] - 16):self.pos[1] + 16]
         result += source_excerpt + '\n'
         cursor_pos_start = 16 + min(0, self.pos[0] - 16)
@@ -71,7 +75,10 @@ class BasicElement(Element):
         return len(self._source)
     
     def __repr__(self, depth=0) -> str:
-        return '\t' * depth + self.__class__.__name__ + ': { "' + self._source.replace('\n', '\\n').replace('  ', '') + '" }'
+        return '\t' * depth + self.__class__.__name__ + ': "' + self._source.replace('\n', '\\n').replace('  ', '') + '"'
+    
+    def get_elements_of_type(self, element_class: type[Element], *, recursive: bool):
+        return []
 
 
 class RegexElement(BasicElement):
@@ -112,10 +119,10 @@ class ComplexElement(Element):
 
             if elements is None:
                 if definition.required:
-                    if i == 0:
-                        return None
-                    else:
+                    if len(list(filter(lambda d: d.required, definitions[:i]))) > 0:
                         raise ParseError(cls, f'Expected element "{definition.element}"', source_text, parsed_length)
+                    else:
+                        return None
                 else:
                     continue
             else:
@@ -198,6 +205,14 @@ class ComplexElement(Element):
             result += '\t' * depth
         result += '}'
         return result
+    
+    def get_elements_of_type(self, element_class: type[Element], *, recursive: bool = False):
+        elements = list(filter(lambda e: isinstance(e, element_class), self.elements))
+        if recursive:
+            for child_element in self.elements:
+                elements += child_element.get_elements_of_type(element_class, recursive=True)
+        return elements
+            
 
 
 # универсальный интерфейс для поиска групп, ограниченных скобками
@@ -272,8 +287,23 @@ class ListElement(ComplexElement):
                 elements.append(element)
                 i += len(element)
 
+    def __len__(self):
+        return sum(map(len, self.elements)) + len(self.delimeter_positions)
+
 
 class File(ComplexElement):
+    @classmethod
+    def parse(cls, source_text: str) -> Self | None:
+        elements = ComplexElement.parse_by_definitions(source_text, cls.ELEMENT_DEFINITIONS)
+        if elements:
+            parsed_length = sum(map(len, elements))
+            if parsed_length < len(source_text):
+                raise ParseError(cls, f'Unexpected character "{source_text[parsed_length:parsed_length+1]}"', source_text, parsed_length)
+            else:
+                return cls(elements)
+        else:
+            return None
+
     @classmethod
     def from_text(cls, source_text: str) -> Self | None:
         return cls.parse(source_text)
