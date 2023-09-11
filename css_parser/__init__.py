@@ -1,52 +1,47 @@
 import re
-from typing import Self
+from typing import Self, type
 import os
 from abc import ABC, abstractmethod
 
-import universal_parser
+from .source import Source
+from .elements import Element
 
-class Element:
+TAB_CHARACTER = '\t'
+
+
+class BasicElement(Element):
     @property
-    @abstractmethod
-    def source_text(self):
-        pass
+    def source_text(self) -> str:
+        return self._source_text
+    
+    def __repr__(self, depth: int) -> str:
+        return TAB_CHARACTER * depth + f'{self.name}: "{self._source_text}"'
 
 
-class Space(Element):
-    def __init__(self, source_text: str, pos: int | tuple[int, int]):
-        if type(pos) is int:
-            pos = (pos, pos)
-        match = re.match(r'^\s+', source_text[pos[0], pos[1]])
-        if match is None:
-            raise ParseError()
-        self.space_text = source_text
-
-    @property
-    def source_text(self):
-        return self.space_text
 
 
-class File(universal_parser.File):
-    ELEMENT_DEFINITIONS = [
-        ElementDefinition([
-            SPACES_AND_COMMENTS,
-            ElementDefinition(AtRule, required=False, single=False),
-            ElementDefinition(RuleSet, required=False, single=False)
-        ], required=False, single=False),
-    ]
+                
+
+
+
+
+
+class File:
 
     @classmethod
     def parse(cls, source_text: str) -> Self | None:
+        source = Source(source_text, 0)
         elements = []
-        for i in range(len(source_text)):
-            if re.match(r'^\s', source_text[i:]):
-                elements.append(Space.parse(source_text, i))
-            elif source_text[i:].startswith('/*'):
-                elements.append(Comment.parse(source_text, i))
-            elif source_text[i:].startswith('@'):
-                elements.append(AtRule.parse(source_text, i))
-            elif re.match(r'^[\w#.]', source_text[i:]):
-                elements.append(RuleSet.parse(source_text, i))
+        while source.tail:
+            spaces_and_comments = find_spaces_and_comments(source)
+            if spaces_and_comments:
+                elements += spaces_and_comments
+                continue
+
+            if source.tail.startswith('@'):
+                elements.append(AtRule(source))
+            elif re.match(r'^[\w#.]', source.tail):
+                elements.append(RuleSet(source))
             else:
                 raise ParseError()
 
