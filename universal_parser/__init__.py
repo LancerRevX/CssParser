@@ -1,10 +1,16 @@
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Type, Self
+from typing import Type, Self, Generic, TypeVar
+import os, os.path
+
+T = TypeVar('T')
 
 
 class Element(ABC):
+    def __init__(self) -> None:
+        self.name = self.__class__.__name__
+
     @classmethod
     @abstractmethod
     def parse(cls, source_text: str) -> Self | None:
@@ -24,13 +30,13 @@ class Element(ABC):
         pass
     
     @abstractmethod
-    def get_elements_of_type(self, element_class: type[Self], *, recursive: bool) -> list[Self]:
+    def get_elements_of_type(self, element_class: type[T], *, recursive: bool) -> list[T]:
         pass
 
 
 class ParseError(RuntimeError):
     def __init__(self, element_class: type[Element], message: str, source_text: str, pos: tuple[int, int] | int | None = None):
-        super().__init__()
+        super(ParseError, self).__init__()
 
         if pos is None:
             pos = (0, len(source_text))
@@ -65,6 +71,7 @@ class ElementDefinition:
 
 class BasicElement(Element):
     def __init__(self, source_text: str):
+        super(BasicElement, self).__init__()
         self._source = source_text
 
     @property
@@ -75,7 +82,7 @@ class BasicElement(Element):
         return len(self._source)
     
     def __repr__(self, depth=0) -> str:
-        return '\t' * depth + self.__class__.__name__ + ': "' + self._source.replace('\n', '\\n').replace('  ', '') + '"'
+        return '\t' * depth + self.name + ': "' + self._source.replace('\n', '\\n').replace('  ', '') + '"'
     
     def get_elements_of_type(self, element_class: type[Element], *, recursive: bool):
         return []
@@ -97,6 +104,7 @@ class RegexElement(BasicElement):
 
 class ComplexElement(Element):
     def __init__(self, elements: list[Element]):
+        super(ComplexElement, self).__init__()
         self.elements = elements
 
     @classmethod
@@ -195,7 +203,7 @@ class ComplexElement(Element):
     ELEMENT_DEFINITIONS: list[ElementDefinition]
 
     def __repr__(self, depth=0) -> str:
-        result = '\t' * depth + self.__class__.__name__ + ': {'
+        result = '\t' * depth + self.name + ': {'
         if len(self.elements) == 0:
             result += ' '
         else:
@@ -206,8 +214,8 @@ class ComplexElement(Element):
         result += '}'
         return result
     
-    def get_elements_of_type(self, element_class: type[Element], *, recursive: bool = False):
-        elements = list(filter(lambda e: isinstance(e, element_class), self.elements))
+    def get_elements_of_type(self, element_class: type[T], *, recursive: bool = False) -> list[T]:
+        elements = [e for e in self.elements if isinstance(e, element_class)]
         if recursive:
             for child_element in self.elements:
                 elements += child_element.get_elements_of_type(element_class, recursive=True)
@@ -228,7 +236,7 @@ class BlockElement(ComplexElement):
         content = ''
         i = len(cls.START_STR)
         while i < len(source_text):
-            if source_text[i:].startswith(cls.START_STR):
+            if source_text[i:].startswith(cls.START_STR) and cls.START_STR != cls.END_STR:
                 nested_delimiter += 1
             elif source_text[i:].startswith(cls.END_STR):
                 if nested_delimiter > 0:
@@ -289,9 +297,25 @@ class ListElement(ComplexElement):
 
     def __len__(self):
         return sum(map(len, self.elements)) + len(self.delimeter_positions)
+    
+    @property
+    def source_text(self):
+        source_text = ''
+        for i, child_element in enumerate(self.elements):
+            for _ in filter(lambda pos: pos == i, self.delimeter_positions):
+                source_text += self.DELIMETER
+            source_text += child_element.source_text
+        for _ in filter(lambda pos: pos == len(self.elements), self.delimeter_positions):
+            source_text += self.DELIMETER
+        return source_text
 
 
 class File(ComplexElement):
+    def __init__(self, elements: list[Element], file_path: str | None = None):
+        super(File, self).__init__(elements)
+        self.file_path = file_path
+        self.name = f'{self.__class__.__name__} "{file_path}"'
+
     @classmethod
     def parse(cls, source_text: str) -> Self | None:
         elements = ComplexElement.parse_by_definitions(source_text, cls.ELEMENT_DEFINITIONS)
@@ -310,6 +334,33 @@ class File(ComplexElement):
 
     @classmethod
     def open(cls, file_path: str):
-        with open(file_path, 'w') as file:
+        with open(file_path, 'r', encoding='utf-8') as file:
             source_text = file.read()
             return cls.from_text(source_text)
+        
+
+class Project(ComplexElement):
+    def __init__(self, elements: list[Element], folder_path: str | None = None):
+        super(Project, self).__init__(elements)
+        self.folder_path = folder_path
+        self.name = f'{self.__class__.__name__} "{folder_path}'
+
+    @classmethod
+    def open(cls, folder_path: str):
+        css_file_paths = cls.find_css_files(folder_path)
+        files = []
+        for file_path in css_file_paths:
+            file = File.open(file_path)
+            if file:
+                files.append(file)
+        return cls(files, folder_path)
+
+    @classmethod
+    def find_css_files(cls, folder_path: str) -> list[str]:
+        css_file_paths = []
+        for file in os.scandir(folder_path):
+            if file.is_dir(follow_symlinks=False):
+                css_file_paths += cls.find_css_files(file.path)
+            elif os.path.splitext(file.path)[1] == '.css':
+                css_file_paths.append(file.path)
+        return css_file_paths

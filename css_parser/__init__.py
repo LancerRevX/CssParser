@@ -1,5 +1,6 @@
 import re
 from typing import Self
+import os
 
 import universal_parser
 from universal_parser import (
@@ -24,7 +25,7 @@ class Semicolon(RegexElement):
 
 
 class PlainText(RegexElement):
-    REGEX = r'.*'
+    REGEX = r'[\s\S]*'
 
 
 class Comment(BlockElement):
@@ -46,7 +47,7 @@ SPACES_AND_COMMENTS = ElementDefinition([
 
 
 class SelectorItem(RegexElement):
-    REGEX = r'[][ ^<>()\w-]*[][^<>()\w-]+'
+    REGEX = r'[][\n@ ^<>()\w:*="#_.-]*[]@[^<>().:\w#_-]+'
 
 
 class Selector(ListElement):
@@ -55,17 +56,17 @@ class Selector(ListElement):
 
 
 class Property(RegexElement):
-    REGEX = r'[-a-zA-Z]+'
+    REGEX = r'[-a-zA-Z0-9]+'
 
 
 
 
 class ValueText(RegexElement):
-    REGEX = r'[-\w ,]+'
+    REGEX = r'[-\'\\\/\w.:!#_ ,%]+'
 
 
 class ValueTextParentheses(RegexElement):
-    REGEX = r'[-\w; ,]+'
+    REGEX = r'[-\'\\\/\w.:; ,%]+'
 
 
 class ParenthesesGroup(BlockElement):
@@ -73,9 +74,16 @@ class ParenthesesGroup(BlockElement):
     END_STR = ')'
 
     ELEMENT_DEFINITIONS = [
-        ElementDefinition([
-            ElementDefinition(ValueTextParentheses, required=False, single=True),
-        ], required=True, single=False)
+        ElementDefinition(ValueTextParentheses, required=True, single=True),
+    ]
+
+
+class QuotedValue(BlockElement):
+    START_STR = '"'
+    END_STR = '"'
+
+    ELEMENT_DEFINITIONS = [
+        ElementDefinition(ValueText, required=False, single=True)
     ]
 
 
@@ -83,6 +91,7 @@ class Value(ComplexElement):
     ELEMENT_DEFINITIONS = [
         ElementDefinition([
             ElementDefinition(ValueText, required=False, single=True),
+            ElementDefinition(QuotedValue, required=False, single=True),
             ElementDefinition(ParenthesesGroup, required=False, single=True),
             ElementDefinition(ValueText, required=False, single=True),
         ], required=True, single=False)
@@ -102,6 +111,15 @@ class Declaration(ComplexElement):
         ElementDefinition(Value, required=True, single=True),
         SPACES_AND_COMMENTS
     ]
+
+    @property
+    def value(self) -> str:
+        return self.get_elements_of_type(Value)[0].source_text
+    
+    @property
+    def property(self) -> str:
+        return self.get_elements_of_type(Property)[0].source_text
+
 
 
 class DeclarationList(ListElement):
@@ -130,9 +148,51 @@ class DeclarationBlock(BlockElement):
 
 class RuleSet(ComplexElement):
     ELEMENT_DEFINITIONS = [
+        SPACES_AND_COMMENTS,
         ElementDefinition(Selector, required=True, single=True),
         SPACES_AND_COMMENTS,
         ElementDefinition(DeclarationBlock, required=True, single=True),
+        SPACES_AND_COMMENTS,
+    ]
+
+    @property
+    def declarations(self) -> list[Declaration]:
+        return self.get_elements_of_type(Declaration, recursive=True)
+
+    @property
+    def properties(self):
+        return self.get_elements_of_type(Property, recursive=True)
+    
+    @property
+    def selector(self):
+        return self.get_elements_of_type(SelectorItem, recursive=True)
+
+
+class AtRuleSelector(RegexElement):
+    REGEX = r'@[][\n ^<>()\w:*="#_.-]*[]@[^<>().:\w#_-]+'
+
+
+class AtRuleBlock(BlockElement):
+    START_STR = '{'
+    END_STR = '}'
+
+    ELEMENT_DEFINITIONS = [
+        ElementDefinition([
+            ElementDefinition(RuleSet, required=False, single=False),
+            SPACES_AND_COMMENTS,
+            ElementDefinition(DeclarationList, required=False, single=False),
+            SPACES_AND_COMMENTS,
+        ], required=False, single=False)
+    ]
+
+
+class AtRule(ComplexElement):
+    ELEMENT_DEFINITIONS = [
+        SPACES_AND_COMMENTS,
+        ElementDefinition(AtRuleSelector, required=True, single=True),
+        SPACES_AND_COMMENTS,
+        ElementDefinition(AtRuleBlock, required=True, single=True),
+        SPACES_AND_COMMENTS
     ]
 
 
@@ -140,6 +200,7 @@ class File(universal_parser.File):
     ELEMENT_DEFINITIONS = [
         ElementDefinition([
             SPACES_AND_COMMENTS,
+            ElementDefinition(AtRule, required=False, single=False),
             ElementDefinition(RuleSet, required=False, single=False)
         ], required=False, single=False),
     ]
@@ -147,3 +208,29 @@ class File(universal_parser.File):
     @property
     def comments(self):
         return self.get_elements_of_type(Comment, recursive=True)
+    
+class Project(universal_parser.Project):
+    def __init__(self, elements: list[Element], folder_path: str | None = None):
+        super(Project, self).__init__(elements)
+        self.folder_path = folder_path
+        self.name = f'{self.__class__.__name__} "{folder_path}'
+
+    @classmethod
+    def open(cls, folder_path: str):
+        css_file_paths = cls.find_css_files(folder_path)
+        files = []
+        for file_path in css_file_paths:
+            file = File.open(file_path)
+            if file:
+                files.append(file)
+        return cls(files, folder_path)
+
+    @classmethod
+    def find_css_files(cls, folder_path: str) -> list[str]:
+        css_file_paths = []
+        for file in os.scandir(folder_path):
+            if file.is_dir(follow_symlinks=False):
+                css_file_paths += cls.find_css_files(file.path)
+            elif os.path.splitext(file.path)[1] == '.css':
+                css_file_paths.append(file.path)
+        return css_file_paths
