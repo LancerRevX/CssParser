@@ -1,6 +1,6 @@
 import argparse
 
-import css_parser
+import css
 
 arg_parser = argparse.ArgumentParser(prog='CSS Parser',
                                      description='Parses CSS files',
@@ -12,6 +12,6 @@ if args.file_path is None:
     arg_parser.print_help()
     exit(0)
 
-file = css_parser.File.open(args.file_path)
+file = css.File.open(args.file_path)
 
 print(file)
