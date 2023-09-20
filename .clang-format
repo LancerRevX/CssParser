@@ -1,6 +1,8 @@
 IndentWidth: 4
 PointerAlignment: Left
-ColumnLimit: 200
+ColumnLimit: 90
 AllowShortEnumsOnASingleLine: false
 AllowShortFunctionsOnASingleLine: None
 AllowShortIfStatementsOnASingleLine: Never
+AlignAfterOpenBracket: Align
+BinPackParameters: true
