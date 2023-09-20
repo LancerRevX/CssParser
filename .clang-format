@@ -1,0 +1,6 @@
+IndentWidth: 4
+PointerAlignment: Left
+ColumnLimit: 200
+AllowShortEnumsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
