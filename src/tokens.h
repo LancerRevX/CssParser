@@ -1,3 +1,5 @@
+#pragma once
+
 #include <regex.h>
 #include <stdbool.h>
 #include <stdio.h>
