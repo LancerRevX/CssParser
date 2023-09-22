@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ctype.h>
 #include <regex.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -9,23 +10,65 @@
 enum token_type {
     token_block_start,
     token_block_end,
+    token_bracket_start,
+    token_bracket_end,
+    token_parentheses_start,
+    token_parentheses_end,
     token_semicolon,
     token_colon,
     token_comma,
+    token_hash,
+    token_dot,
+    token_at,
+    token_exclamation,
+    token_percent,
 
     token_space,
     token_comment,
+    token_identifier,
     token_string,
+    token_number,
 };
 
 char const single_char_tokens[] = {
     [token_block_start] = '{',
     [token_block_end] = '}',
+    [token_bracket_start] = '[',
+    [token_bracket_end] = ']',
+    [token_parentheses_start] = '(',
+    [token_parentheses_end] = ')',
     [token_semicolon] = ';',
     [token_colon] = ':',
     [token_comma] = ',',
-    0
-};
+    [token_hash] = '#',
+    [token_dot] = '.',
+    [token_at] = '@',
+    [token_exclamation] = '!',
+    [token_percent] = '%',
+    0};
+
+char const* token_names[] = {
+    [token_block_start] = "Block start",
+    [token_block_end] = "Block end",
+    [token_bracket_start] = "[",
+    [token_bracket_end] = "]",
+    [token_parentheses_start] = "(",
+    [token_parentheses_end] = ")",
+    [token_semicolon] = "Semicolon",
+    [token_colon] = "Colon",
+    [token_comma] = "Comma",
+    [token_hash] = "Hash",
+    [token_dot] = "Dot (.)",
+    [token_at] = "@",
+    [token_exclamation] = "Exclamation (!)",
+    [token_percent] = "Percent sign (%)",
+
+    [token_space] = "Space",
+    [token_comment] = "Comment",
+    [token_identifier] = "Identifier",
+    [token_string] = "Quoted string",
+    [token_number] = "Number",
+    0};
 
 struct token {
     enum token_type type;
@@ -42,61 +85,191 @@ struct lexical_error {
     size_t length;
 };
 
-enum token_status {
+typedef enum token_status {
     token_found,
     token_not_found,
     token_error
-};
+} token_status;
 
 void free_tokens(struct token* first_token) {
-    for (struct token* token = first_token; token != 0; token = token->next) {
+    for (struct token* token = first_token; token != 0;) {
         struct token* previous = token;
         token = token->next;
         free(previous);
     }
 }
 
-enum token_status get_space_token(struct token* token, char const* source, size_t pos);
-enum token_status get_single_char_token(struct token* token, char const* source,
-                                        size_t pos);
-enum token_status get_comment_token(struct token*, char const*, size_t,
-                                    struct lexical_error*);
-enum token_status get_string_token(struct token* token, char const* source, size_t pos,
-                                   struct lexical_error*);
+typedef token_status (get_token_function)(struct token*, char const*, size_t, struct lexical_error*);
 
-enum token_status get_token(struct token* token, char const* source, size_t pos,
-                            struct lexical_error* error) {
-    if (get_space_token(token, source, pos) == token_found) {
-        return token_found;
+token_status get_space_token(struct token* token, char const* source, size_t pos, struct lexical_error* error) {
+    (void) error;
+
+    static regex_t space_regex;
+    static int space_regex_comp_result = -1;
+    if (space_regex_comp_result == -1) {
+        space_regex_comp_result = regcomp(&space_regex, "^[[:space:]]\\{1,\\}", 0);
+        if (space_regex_comp_result != 0) {
+            fprintf(stderr, "Error compiling space regex. Error code = %d", space_regex_comp_result);
+            exit(space_regex_comp_result);
+        }
     }
 
-    if (get_single_char_token(token, source, pos) == token_found) {
+    regmatch_t space_match;
+    if (regexec(&space_regex, &source[pos], 1, &space_match, 0) == 0) {
+        token->type = token_space;
+        token->pointer = &source[pos];
+        token->length = space_match.rm_eo - space_match.rm_so;
         return token_found;
+    } else {
+        return token_not_found;
     }
+}
 
-    switch (get_comment_token(token, source, pos, error)) {
-    case token_found:
-        return token_found;
-    case token_error:
-        return token_error;
-    default:
-        break;
-    }
+token_status get_single_char_token(struct token* token, char const* source, size_t pos, struct lexical_error* error) {
+    (void) error;
 
-    switch (get_string_token(token, source, pos, error)) {
-    case token_found:
-        return token_found;
-    case token_error:
-        return token_error;
-    default:
-        break;
+    for (size_t token_type = 0; single_char_tokens[token_type] != 0; token_type++) {
+        if (source[pos] == single_char_tokens[token_type]) {
+            token->type = token_type;
+            token->pointer = &source[pos];
+            token->length = 1;
+
+            return token_found;
+        }
     }
 
     return token_not_found;
 }
 
-enum token_status parse_tokens(struct token** first_token, size_t* tokens_number,
-                               char const* source, struct lexical_error* error) {
+token_status get_comment_token(struct token* token, char const* source, size_t pos, struct lexical_error* error) {
+    if (strncmp(&source[pos], "/*", 2) != 0) {
+        return token_not_found;
+    }
+
+    char* comment_end = strstr(&source[pos], "*/");
+    if (comment_end == 0) {
+        error->message = "unmatched comment start '/*'";
+        error->source = source;
+        error->pos = pos;
+        error->length = 2;
+        return token_error;
+    }
+
+    token->type = token_comment;
+    token->pointer = &source[pos];
+    token->length = (comment_end + 2) - (source + pos);
+    return token_found;
+}
+
+token_status get_string_token(struct token* token, char const* source, size_t pos, struct lexical_error* error) {
+    char quote = source[pos];
+    if (quote != '"' && quote != '\'') {
+        return token_not_found;
+    }
+
+    char const* end_quote = strchr(&source[pos+1], quote);
+    if (end_quote == 0) {
+        error->message = "unmatched quote";
+        error->source = source;
+        error->pos = pos;
+        error->length = 1;
+
+        return token_error;
+    }
+
+    token->type = token_string;
+    token->pointer = &source[pos];
+    token->length = end_quote - source + 1;
+    return token_found;
+}
+
+token_status get_number_token(struct token* token, char const* source, size_t pos, struct lexical_error* error) {
+    (void) error;
+
+    static regex_t number_regex;
+    static int number_regex_comp_result = -1;
+    if (number_regex_comp_result == -1) {
+        number_regex_comp_result = regcomp(&number_regex, "^[[:digit:]]+(\\.[[:digit:]]+)?", REG_EXTENDED);
+        if (number_regex_comp_result != 0) {
+            fprintf(stderr, "Error compiling space regex. Error code = %d", number_regex_comp_result);
+            exit(number_regex_comp_result);
+        }
+    }
+
+    regmatch_t number_match;
+    int result = regexec(&number_regex, &source[pos], 1, &number_match, 0);
+    if (result != 0) {
+        return token_not_found;
+    }
+
+    token->type = token_number;
+    token->pointer = &source[pos];
+    token->length = number_match.rm_eo - number_match.rm_so;
+    return token_found;
+}
+
+token_status get_identifier_token(struct token* token, char const* source, size_t pos, struct lexical_error* error) {
+    (void) error;
+
+    size_t source_length = strlen(source);
+    size_t i;
+    for (i = pos; i < source_length; i++) {
+        if (i == pos && isdigit(source[i])) {
+            return token_not_found;
+        }
+
+        if (i == pos + 1 && source[i - 1] == '-' && isdigit(source[i])) {
+            return token_not_found;
+        }
+
+        if (!isalpha(source[i]) && !isdigit(source[i]) && source[i] != '-' && source[i] != '_') {
+            break;
+        }
+    }
+
+    size_t token_length = i - pos;
+    if (token_length < 1 || (token_length == 1 && source[pos] == '-')) {
+        return token_not_found;
+    }
+
+    token->type = token_identifier;
+    token->pointer = &source[pos];
+    token->length = token_length;
+    return token_found;
+}
+
+token_status get_token(struct token* token, char const* source, size_t pos, struct lexical_error* error) {
+    get_token_function* get_token_functions[] = {
+        get_space_token,
+        get_comment_token,
+        get_single_char_token,
+        get_identifier_token,
+        get_number_token,
+        get_string_token,
+        0
+    };
+
+    for (size_t i = 0;; i++) {
+        if (get_token_functions[i] == 0) {
+            break;
+        }
+
+        token_status result = get_token_functions[i](token, source, pos, error);
+        switch (result)
+        {
+        case token_found:
+        case token_error:
+            return result;
+
+        case token_not_found:
+            continue;
+        }
+    }
+
+    return token_not_found;
+}
+
+token_status parse_tokens(struct token** first_token, size_t* tokens_number, char const* source, struct lexical_error* error) {
     size_t source_len = strlen(source);
 
     size_t i = 0;
@@ -124,155 +297,13 @@ enum token_status parse_tokens(struct token** first_token, size_t* tokens_number
             error->source = source;
             error->pos = i;
             error->length = 1;
-            
-            return token_not_found;
+
+            return token_error;
         case token_error:
             free_tokens(*first_token);
             return token_error;
         }
     }
 
-    return token_found;
-}
-
-enum token_status get_space_token(struct token* token, char const* source, size_t pos) {
-    static regex_t space_regex;
-    static int space_regex_comp_result = -1;
-    if (space_regex_comp_result == -1) {
-        space_regex_comp_result = regcomp(&space_regex, "^[[:space:]]\\{1,\\}", 0);
-        if (space_regex_comp_result != 0) {
-            fprintf(stderr, "Error compiling space regex. Error code = %d",
-                    space_regex_comp_result);
-            exit(space_regex_comp_result);
-        }
-    }
-
-    regmatch_t space_match;
-    if (regexec(&space_regex, &source[pos], 1, &space_match, 0) == 0) {
-        token->type = token_space;
-        token->pointer = &source[pos];
-        token->length = space_match.rm_eo - space_match.rm_so;
-        return token_found;
-    } else {
-        return token_not_found;
-    }
-}
-
-enum token_status get_single_char_token(struct token* token, char const* source,
-                                        size_t pos) {
-    for (size_t token_type = 0; single_char_tokens[token_type] != 0; token_type++) {
-        if (source[pos] == single_char_tokens[token_type]) {
-            token->type = token_type;
-            token->pointer = &source[pos];
-            token->length = 1;
-
-            return token_found;
-        }
-    }
-
-    return token_not_found;
-}
-
-enum token_status get_comment_token(struct token* token, char const* source, size_t pos,
-                                    struct lexical_error* error) {
-    if (strncmp(&source[pos], "/*", 2) != 0) {
-        return token_not_found;
-    }
-
-    char* comment_end = strstr(&source[pos], "*/");
-    if (comment_end == 0) {
-        error->message = "unmatched comment start '/*'";
-        error->source = source;
-        error->pos = pos;
-        error->length = 2;
-        return token_error;
-    }
-
-    token->type = token_comment;
-    token->pointer = &source[pos];
-    token->length = (comment_end + 2) - (source + pos);
-    return token_found;
-}
-
-enum token_status get_string_token(struct token* token, char const* source, size_t pos,
-                                   struct lexical_error* error) {
-    static regex_t space_regex;
-    static int space_regex_comp_result = -1;
-    if (space_regex_comp_result == -1) {
-        space_regex_comp_result = regcomp(&space_regex, "^[[:space:]]", 0);
-        if (space_regex_comp_result != 0) {
-            fprintf(stderr, "Error compiling space regex. Error code = %d",
-                    space_regex_comp_result);
-            exit(space_regex_comp_result);
-        }
-    }
-
-    char parentheses[strlen(&source[pos])];
-    size_t parentheses_num = 0;
-    size_t last_parenthesis_i = -1;
-    int last_non_space_char_i = -1;
-    size_t i = pos;
-    while (i < strlen(source)) {
-        char current_char = source[i];
-        switch (current_char) {
-        case '(':
-        case '[':
-            parentheses[parentheses_num] = current_char;
-            last_parenthesis_i = i;
-            parentheses_num++;
-            break;
-        case ')':
-            if (parentheses[parentheses_num - 1] == '(') {
-                parentheses_num--;
-            } else {
-                error->message = "unmatched parenthesis ')'";
-                error->pos = i;
-                error->length = 1;
-                return token_error;
-            }
-            break;
-        case ']':
-            if (parentheses[parentheses_num - 1] == '[') {
-                parentheses_num--;
-            } else {
-                error->message = "unmatched parenthesis ']'";
-                error->pos = i;
-                error->length = 1;
-                return token_error;
-            }
-            break;
-        case ';':
-        case '{':
-        case '}':
-        case ',':
-        case ':':
-            if (parentheses_num == 0) {
-                goto return_token;
-            }
-        }
-
-        if (regexec(&space_regex, &source[i], 0, 0, 0) != 0) {
-            last_non_space_char_i = i;
-        }
-
-        i++;
-    }
-
-return_token:
-
-    if (last_non_space_char_i == -1) {
-        return token_not_found;
-    }
-
-    if (parentheses_num > 0) {
-        error->message = "unmatched starting parenthesis";
-        error->pos = last_parenthesis_i;
-        error->length = 1;
-        return token_error;
-    }
-
-    token->type = token_string;
-    token->pointer = &source[pos];
-    token->length = last_non_space_char_i - pos + 1;
     return token_found;
 }
