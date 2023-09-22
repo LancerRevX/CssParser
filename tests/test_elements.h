@@ -1,6 +1,6 @@
 #include <check.h>
 
-#include "../css_parser/elements.h"
+#include "css/elements.h"
 
 START_TEST(rule_set_valid) {
     struct {
@@ -16,11 +16,10 @@ START_TEST(rule_set_valid) {
             "   proerty2_: url(some url);",
             "   property3: 'a string with unmatched parenthesis (  123';"
             "}",
-            is_valid: true,
-            selectors_number: 2,
-            declarations_number: 3,
-        }
-    };
+            is_valid : true,
+            selectors_number : 2,
+            declarations_number : 3,
+        }};
 
     for (size_t i = 0; i < 1; i++) {
         struct token* first_token;
@@ -35,10 +34,14 @@ START_TEST(rule_set_valid) {
             ck_assert_int_eq(result, element_found);
             ck_assert_int_eq(element.type, element_rule_set);
             ck_assert_ptr_nonnull(element.first_child);
-            size_t selectors_number = 0;
-            size_t declarations_number = 0;
-            for (struct token* token = element.start; token != )
-            for
+            ck_assert_int_eq(
+                count_elements_of_type(&element, element_selector),
+                tests[i].selectors_number
+            );
+            ck_assert_int_eq(
+                count_elements_of_type(&element, element_declaration),
+                tests[i].declarations_number
+            );
         } else {
             ck_assert_int_eq(result, element_error);
         }
@@ -49,15 +52,8 @@ END_TEST
 Suite* test_elements_suite() {
     Suite* suite = suite_create("Elements");
 
-    TCase* identifiers = tcase_create("Identifiers");
-    tcase_add_test(identifiers, identifier_test);
-
-    TCase* parse = tcase_create("Parse");
-    // tcase_add_test(parse, parse_tokens_case1);
-    tcase_add_test(parse, parse_tokens_invalid_token);
-
-    suite_add_tcase(suite, identifiers);
-    suite_add_tcase(suite, parse);
+    TCase* rule_sets = tcase_create("Rule set");
+    tcase_add_test(rule_sets, rule_set_valid);
 
     return suite;
 }

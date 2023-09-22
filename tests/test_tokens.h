@@ -2,7 +2,7 @@
 
 #include <check.h>
 
-#include "../css_parser/tokens.h"
+#include "css/tokens.h"
 
 START_TEST(space_valid) {
     char const* source = "   \n\t/*abc*/  defg";
