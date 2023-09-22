@@ -1,5 +1,5 @@
-find_package(Criterion REQUIRED)
+find_package(Check REQUIRED)
 
-add_executable(test_tokens test_tokens.c)
-target_link_libraries(test_tokens ${CRITERION_LIBRARIES} regex pthread)
-target_compile_options(test_tokens PRIVATE -Wall -Wextra -Wpedantic -Werror)
+add_executable(tests tests.c)
+target_link_libraries(tests ${CHECK_LIBRARIES} regex pthread)
+target_compile_options(tests PRIVATE -Wall -Wextra -Wpedantic)
