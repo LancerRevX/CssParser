@@ -1,102 +1,11 @@
-#pragma once
+#include "tokens.h"
 
-#include <ctype.h>
-#include <regex.h>
-#include <stdbool.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-enum token_type {
-    token_block_start,
-    token_block_end,
-    token_bracket_start,
-    token_bracket_end,
-    token_parentheses_start,
-    token_parentheses_end,
-    token_semicolon,
-    token_colon,
-    token_comma,
-    token_hash,
-    token_dot,
-    token_at,
-    token_exclamation,
-    token_percent,
-
-    token_space,
-    token_comment,
-    token_identifier,
-    token_string,
-    token_number,
-};
-
-char const single_char_tokens[] = {
-    [token_block_start] = '{',
-    [token_block_end] = '}',
-    [token_bracket_start] = '[',
-    [token_bracket_end] = ']',
-    [token_parentheses_start] = '(',
-    [token_parentheses_end] = ')',
-    [token_semicolon] = ';',
-    [token_colon] = ':',
-    [token_comma] = ',',
-    [token_hash] = '#',
-    [token_dot] = '.',
-    [token_at] = '@',
-    [token_exclamation] = '!',
-    [token_percent] = '%',
-    0};
-
-char const* token_names[] = {
-    [token_block_start] = "Block start",
-    [token_block_end] = "Block end",
-    [token_bracket_start] = "[",
-    [token_bracket_end] = "]",
-    [token_parentheses_start] = "(",
-    [token_parentheses_end] = ")",
-    [token_semicolon] = "Semicolon",
-    [token_colon] = "Colon",
-    [token_comma] = "Comma",
-    [token_hash] = "Hash",
-    [token_dot] = "Dot (.)",
-    [token_at] = "@",
-    [token_exclamation] = "Exclamation (!)",
-    [token_percent] = "Percent sign (%)",
-
-    [token_space] = "Space",
-    [token_comment] = "Comment",
-    [token_identifier] = "Identifier",
-    [token_string] = "Quoted string",
-    [token_number] = "Number",
-    0};
-
-struct token {
-    enum token_type type;
-    const char* pointer;
-    size_t length;
-
-    struct token* next;
-};
-
-struct lexical_error {
-    const char* message;
-    const char* source;
-    size_t pos;
-    size_t length;
-};
-
-typedef enum token_status {
-    token_found,
-    token_not_found,
-    token_error
-} token_status;
-
-void free_tokens(struct token* first_token) {
-    for (struct token* token = first_token; token != 0;) {
-        struct token* previous = token;
-        token = token->next;
-        free(previous);
+void free_tokens(struct token** token) {
+    if ((*token)->next) {
+        free_tokens(&(*token)->next);
     }
+    free(*token);
+    (*token) = 0;
 }
 
 typedef token_status (get_token_function)(struct token*, char const*, size_t, struct lexical_error*);

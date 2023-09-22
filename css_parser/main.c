@@ -3,8 +3,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#include "tokens.h"
-#include "elements.h"
+#include <css/tokens.h>
+#include <css/elements.h>
 
 void print_help() {
     puts("Usage: css-parser [-f FILE_PATH] [-p PROJECT_PATH] [OPTIONS]");
