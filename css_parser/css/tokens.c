@@ -200,7 +200,7 @@ token_status parse_tokens(struct token** first_token, size_t* tokens_number, cha
             (*tokens_number)++;
             continue;
         case token_not_found:
-            free_tokens(*first_token);
+            free_tokens(first_token);
 
             error->message = "unexpected character";
             error->source = source;

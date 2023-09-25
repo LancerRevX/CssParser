@@ -1,1 +1,2 @@
 add_library(css_parser_lib tokens.c)
+target_link_libraries(css_parser_lib regex)

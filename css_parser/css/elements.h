@@ -16,16 +16,25 @@ enum element_type {
     element_declaration,
     element_property,
     element_value,
+
+    element_types_number
 };
 
-char const* const element_name[] = {
+static char const* const element_name[] = {
     [element_regular_at_rule] = "Regular at rule",
     [element_nested_at_rule] = "Nested at rule",
     [element_conditional_group_at_rule] = "Conditional group at rule",
     [element_rule_set] = "Rule set",
+    [element_selector] = "Selector",
     [element_declaration] = "Declaration",
     [element_property] = "Property",
     [element_value] = "Value",
+};
+
+struct at_rule {
+    struct token* identifier;
+    struct element* rule;
+    struct element* block;
 };
 
 struct declaration {
@@ -46,6 +55,7 @@ struct element {
     struct element* first_child;
 
     union {
+        struct at_rule at_rule;
         struct rule_set rule_set;
         struct declaration declaration;
     };
@@ -92,6 +102,22 @@ size_t element_length(struct element* element) {
     return (element->end->pointer - element->start->pointer) + element->end->length;
 }
 
+size_t element_add_child(struct element* element, struct element* new_child) {
+    if (element->first_child == 0) {
+        element->first_child = new_child;
+        return 1;
+    } else {
+        size_t i = 1;
+        struct element* child = element->first_child;
+        while (child->next != 0) {
+            child = child->next;
+            i++;
+        }
+        child->next = new_child;
+        return i + 1;
+    }
+}
+
 void print_element_content(struct element* element) {
     printf("%.*s", (int)element_length(element), element->start->pointer);
 }
@@ -125,66 +151,133 @@ void print_element_tree(struct element* element, size_t depth) {
     }
 }
 
+enum element_type get_at_rule_type(char const* identifier) {
+    for (char const* const* at_rule = regular_at_rules; *at_rule; at_rule++) {
+        if (strcmp(*at_rule, identifier) == 0) {
+            return element_regular_at_rule;
+        }
+    }
+    for (char const* const* at_rule = nested_at_rules; *at_rule; at_rule++) {
+        if (strcmp(*at_rule, identifier) == 0) {
+            return element_nested_at_rule;
+        }
+    }
+    for (char const* const* at_rule = conditional_group_at_rules; *at_rule; at_rule++) {
+        if (strcmp(*at_rule, identifier) == 0) {
+            return element_conditional_group_at_rule;
+        }
+    }
+    return -1;
+}
+
 element_status get_rule_set(struct token** token, struct element* element, struct syntax_error* error) {
-    if ((*token)->type != token_at) {
-        error->message = "expected '@' at the start of at-rule";
-        error->token = *token;
-        return element_error;
-    }
-    element->start = *token;
-
-    (*token) = (*token)->next;
-
-    if ((*token)->type != token_identifier) {
-        error->message = "expected at-rule identifier";
-        error->token = *token;
-        return element_error;
-    }
-    int type = get_at_rule_type((*token)->pointer);
-
-    (*token) = (*token)->next;
+    return element_found;
 }
 
-element_status get_regular_at_rule(struct token* token, struct element* element) {
-    // if (token->length < 2 || token->pointer[0] != '@') {
-    //     return element_not_found;
-    // }
+element_status parse_at_rule_rule(struct token** token, struct element* at_rule, struct syntax_error* error) {
+    struct element* rule = malloc(sizeof(struct element));
 
-    // bool valid_regular_at_rule = false;
-    // for (const char** regular_at_rule; regular_at_rule != 0; regular_at_rule++) {
-    //     if (strncmp(token->pointer, *regular_at_rule, strlen(*regular_at_rule)) == 0) {
-    //         valid_regular_at_rule = true;
-    //     }
-    // }
-    // if (!valid_regular_at_rule) {
-    //     return element_not_found;
-    // }
+    struct token* const first_token = *token;
+    struct token* last_meaning_token = 0;
+    struct token* last_parenthesis = 0;
+    size_t tokens_number = 0;
+    size_t parentheses = 0;
+    while (*token) {
+        if ((*token)->type == token_block_start) {
+            break;
+        }
+
+        if ((*token)->type == token_semicolon && parentheses == 0) {
+            break;
+        }
+
+        if ((*token)->type == token_space || (*token)->type == token_comment) {
+            *token = (*token)->next;
+            continue;
+        }
+
+        if ((*token)->type == token_parentheses_start) {
+            parentheses++;
+            last_parenthesis = *token;
+        } else if ((*token)->type == token_parentheses_end) {
+            if (parentheses > 0) {
+                parentheses--;
+            } else {
+                error->message = "unmatched closing parenthesis";
+                error->token = *token;
+                free(rule);
+                return element_error;
+            }
+        }
+
+        tokens_number++;
+        last_meaning_token = *token;
+        *token = (*token)->next;
+    }
+
+    if (tokens_number == 0) {
+        error->message = "empty at-rule rule";
+        error->token = first_token;
+        free(rule);
+        return element_error;
+    }
+
+    if (parentheses > 0) {
+        error->message = "unclosed parentheses";
+        error->token = last_parenthesis;
+        free(rule);
+        return element_error;
+    }
+
+    at_rule->at_rule.rule = rule;
+    element_add_child(at_rule, rule);
+    return element_found;
 }
 
-int get_at_rule_type(char const* identifier) {
+element_status get_regular_at_rule_body(struct token** token, struct element* element, struct syntax_error* error) {
+}
+
+element_status get_nested_at_rule(struct token** token, struct element* element, struct syntax_error* error) {
+}
+
+element_status get_conditional_group_at_rule(struct token** token, struct element* element, struct syntax_error* error) {
 }
 
 element_status get_at_rule(struct token** token, struct element* element, struct syntax_error* error) {
-    if ((*token)->type != token_at) {
-        error->message = "expected '@' at the start of at-rule";
-        error->token = *token;
-        return element_error;
-    }
     element->start = *token;
 
     (*token) = (*token)->next;
-
-    if ((*token)->type != token_identifier) {
+    if (!(*token) || (*token)->type != token_identifier) {
         error->message = "expected at-rule identifier";
         error->token = *token;
         return element_error;
     }
+
     int type = get_at_rule_type((*token)->pointer);
 
     (*token) = (*token)->next;
+
+    enum element_status result = -1;
+    switch (type) {
+    case element_regular_at_rule:
+        result = get_regular_at_rule_body(token, element, error);
+        break;
+    case element_nested_at_rule:
+        result = get_nested_at_rule(token, element, error);
+        break;
+    case element_conditional_group_at_rule:
+        result = get_conditional_group_at_rule(token, element, error);
+        break;
+    default:
+        error->message = "unknown at-rule identifier";
+        error->token = *token;
+        return element_error;
+    }
+
+    return result;
 }
 
-element_status parse_elements(struct token* first_token, struct element** first_element, size_t* elements_number) {
+element_status parse_elements(struct token* first_token, struct element** first_element, size_t* elements_number, struct syntax_error* error) {
     struct element* element = 0;
     *elements_number = 0;
 
@@ -205,10 +298,22 @@ element_status parse_elements(struct token* first_token, struct element** first_
             token = token->next;
             continue;
         case token_at:
-            get_at_rule(&token, &element);
+            get_at_rule(&token, element, error);
             break;
+        case token_dot:
+        case token_hash:
+        case token_identifier:
+            get_rule_set(&token, element, error);
+            break;
+        default:
+            error->message = "unexpected token";
+            error->token = token;
+            free_elements(*first_element);
+            return element_error;
         }
     }
+
+    return element_found;
 }
 
 size_t count_elements_of_type(struct element* element, enum element_type type) {

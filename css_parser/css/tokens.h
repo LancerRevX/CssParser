@@ -30,7 +30,7 @@ enum token_type {
     token_number,
 };
 
-char const single_char_tokens[] = {
+static char const single_char_tokens[] = {
     [token_block_start] = '{',
     [token_block_end] = '}',
     [token_bracket_start] = '[',
@@ -47,7 +47,7 @@ char const single_char_tokens[] = {
     [token_percent] = '%',
     0};
 
-char const* const token_names[] = {
+static char const* const token_names[] = {
     [token_block_start] = "Block start",
     [token_block_end] = "Block end",
     [token_bracket_start] = "[",
@@ -86,9 +86,9 @@ typedef struct lexical_error {
 } css_lexical_error;
 
 typedef enum token_status {
-    token_found,
-    token_not_found,
-    token_error
+    token_found = 0x0,
+    token_not_found = 0x1,
+    token_error = 0x2
 } token_status;
 
 typedef token_status(get_token_function)(struct token*, char const*, size_t, struct lexical_error*);
