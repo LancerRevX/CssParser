@@ -183,7 +183,7 @@ int main(int argc, char* argv[]) {
         } else {
             printf("Found %i elements:\n", elements_number);
             for (struct element* element = first_element; element != 0; element = element->next) {
-                print_element_tree(element, 0);
+                element_print_tree(element, 0);
             }
         }
     }
