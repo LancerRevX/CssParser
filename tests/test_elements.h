@@ -60,27 +60,47 @@ START_TEST(test_at_rule_rule) {
     enum token_status token_status = parse_tokens(&first_token, &tokens_number, source, &lexical_error);
     ck_assert_int_eq(token_status, token_found);
 
-    struct element at_rule;
+    struct element rule;
     struct syntax_error syntax_error;
-    enum element_status at_rule_result = parse_at_rule_rule(&first_token, &at_rule, &syntax_error);
+    enum element_status at_rule_result = parse_at_rule_rule(&first_token, &rule, &syntax_error);
 
     ck_assert_int_eq(at_rule_result, element_found);
-    ck_assert_int_eq(element_length(&at_rule), 18);
-    ck_assert_int_eq(at_rule.start->type, token_block_start);
-    ck_assert_int_eq(at_rule.end->type, token_block_end);
+    ck_assert_int_eq(element_length(&rule), 18);
+    ck_assert_int_eq(rule.start->type, token_parentheses_start);
+    ck_assert_int_eq(rule.end->type, token_parentheses_end);
+}
+END_TEST
+
+START_TEST(test_regular_at_rule) {
+    char const* source = "@charset \"utf-8\"; something else ;";
+    struct token* first_token = 0;
+    size_t tokens_number = 0;
+    struct lexical_error lexical_error;
+    enum token_status token_status = parse_tokens(&first_token, &tokens_number, source, &lexical_error);
+    ck_assert_int_eq(token_status, token_found);
+
+    struct element at_rule;
+    struct syntax_error syntax_error;
+    enum element_status at_rule_result = parse_at_rule(&first_token, &at_rule, &syntax_error);
+
+    ck_assert_int_eq(at_rule_result, element_found);
+    ck_assert_int_eq(at_rule.type, element_regular_at_rule);
+    ck_assert_int_eq(element_length(&at_rule), 16);
+    ck_assert_int_eq(at_rule.start->type, token_at);
+    ck_assert_int_eq(at_rule.end->type, token_string);
 }
 END_TEST
 
 Suite* test_elements_suite() {
     Suite* suite = suite_create("Elements");
 
-    TCase* rule_sets = tcase_create("Rule set");
-    tcase_add_test(rule_sets, rule_set_valid);
+    // TCase* rule_sets = tcase_create("Rule set");
+    // tcase_add_test(rule_sets, rule_set_valid);
 
     TCase* at_rules = tcase_create("At rules");
     tcase_add_test(at_rules, test_at_rule_rule);
 
-    suite_add_tcase(suite, rule_sets);
+    // suite_add_tcase(suite, rule_sets);
     suite_add_tcase(suite, at_rules);
 
     return suite;

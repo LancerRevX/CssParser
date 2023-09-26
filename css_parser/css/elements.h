@@ -11,6 +11,7 @@ enum element_type {
     element_regular_at_rule,
     element_nested_at_rule,
     element_conditional_group_at_rule,
+    element_at_rule_rule,
     element_rule_set,
     element_selector,
     element_declaration,
@@ -24,6 +25,7 @@ static char const* const element_name[] = {
     [element_regular_at_rule] = "Regular at rule",
     [element_nested_at_rule] = "Nested at rule",
     [element_conditional_group_at_rule] = "Conditional group at rule",
+    [element_at_rule_rule] = "Rule of at-rule",
     [element_rule_set] = "Rule set",
     [element_selector] = "Selector",
     [element_declaration] = "Declaration",
@@ -99,7 +101,7 @@ void free_elements(struct element* first_element) {
 }
 
 size_t element_length(struct element* element) {
-    return (element->end->pointer - element->start->pointer) + element->end->length;
+    return ((size_t)element->end->pointer - (size_t)element->start->pointer) + element->end->length;
 }
 
 size_t element_add_child(struct element* element, struct element* new_child) {
@@ -174,8 +176,10 @@ element_status get_rule_set(struct token** token, struct element* element, struc
     return element_found;
 }
 
-element_status parse_at_rule_rule(struct token** token, struct element* at_rule, struct syntax_error* error) {
-    struct element* rule = malloc(sizeof(struct element));
+element_status parse_at_rule_rule(struct token** token, struct element* rule, struct syntax_error* error) {
+    rule->type = element_at_rule_rule;
+    rule->first_child = 0;
+    rule->next = 0;
 
     struct token* const first_token = *token;
     struct token* last_meaning_token = 0;
@@ -205,9 +209,12 @@ element_status parse_at_rule_rule(struct token** token, struct element* at_rule,
             } else {
                 error->message = "unmatched closing parenthesis";
                 error->token = *token;
-                free(rule);
                 return element_error;
             }
+        }
+
+        if (tokens_number == 0) {
+            rule->start = *token;
         }
 
         tokens_number++;
@@ -218,19 +225,16 @@ element_status parse_at_rule_rule(struct token** token, struct element* at_rule,
     if (tokens_number == 0) {
         error->message = "empty at-rule rule";
         error->token = first_token;
-        free(rule);
         return element_error;
     }
 
     if (parentheses > 0) {
         error->message = "unclosed parentheses";
         error->token = last_parenthesis;
-        free(rule);
         return element_error;
     }
 
-    at_rule->at_rule.rule = rule;
-    element_add_child(at_rule, rule);
+    rule->end = last_meaning_token;
     return element_found;
 }
 
@@ -243,8 +247,10 @@ element_status get_nested_at_rule(struct token** token, struct element* element,
 element_status get_conditional_group_at_rule(struct token** token, struct element* element, struct syntax_error* error) {
 }
 
-element_status get_at_rule(struct token** token, struct element* element, struct syntax_error* error) {
-    element->start = *token;
+element_status parse_at_rule(struct token** token, struct element* at_rule, struct syntax_error* error) {
+    at_rule->start = *token;
+    at_rule->first_child = 0;
+    at_rule->next = 0;
 
     (*token) = (*token)->next;
     if (!(*token) || (*token)->type != token_identifier) {
@@ -254,24 +260,36 @@ element_status get_at_rule(struct token** token, struct element* element, struct
     }
 
     int type = get_at_rule_type((*token)->pointer);
-
-    (*token) = (*token)->next;
-
-    enum element_status result = -1;
-    switch (type) {
-    case element_regular_at_rule:
-        result = get_regular_at_rule_body(token, element, error);
-        break;
-    case element_nested_at_rule:
-        result = get_nested_at_rule(token, element, error);
-        break;
-    case element_conditional_group_at_rule:
-        result = get_conditional_group_at_rule(token, element, error);
-        break;
-    default:
+    if (type == -1) {
         error->message = "unknown at-rule identifier";
         error->token = *token;
         return element_error;
+    }
+
+    (*token) = (*token)->next;
+
+    struct element* rule = malloc(sizeof(struct element));
+    enum element_status result;
+    result = parse_at_rule_rule(token, rule, error);
+    if (result != element_found) {
+        free(rule);
+        return result;
+    }
+    at_rule->at_rule.rule = rule;
+
+    if (type == element_regular_at_rule) {
+        return element_found;
+    }
+
+    switch (type) {
+    case element_regular_at_rule:
+        return element_found;
+    case element_nested_at_rule:
+        result = parse_declaration_block(token, block, error);
+        break;
+    case element_conditional_group_at_rule:
+        result = parse_conditional_group_block(token, block, error);
+        break;
     }
 
     return result;
@@ -298,7 +316,7 @@ element_status parse_elements(struct token* first_token, struct element** first_
             token = token->next;
             continue;
         case token_at:
-            get_at_rule(&token, element, error);
+            parse_at_rule(&token, element, error);
             break;
         case token_dot:
         case token_hash:

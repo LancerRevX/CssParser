@@ -107,7 +107,7 @@ START_TEST(parse_tokens_invalid_token) {
     struct lexical_error error;
     enum token_status result = parse_tokens(&first_token, &tokens_number, source, &error);
 
-    ck_assert_int_eq(result, token_not_found);
+    ck_assert_int_eq(result, token_error);
     ck_assert_int_eq(error.pos, strstr(source, "$") - source);
 }
 END_TEST
