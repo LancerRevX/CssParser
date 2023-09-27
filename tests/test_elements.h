@@ -14,9 +14,9 @@ START_TEST(rule_set_valid) {
     } tests[10] = {
         {
             "#some-selector .chlid-selector,"
-            "selector-2 > selector2-child {",
+            "selector-2 > selector2-child {"
             "   property1: value1;"
-            "   proerty2_: url(some url);",
+            "   proerty2_: url(some url);"
             "   property3: 'a string with unmatched parenthesis (  123';"
             "}",
             is_valid : true,
@@ -126,19 +126,19 @@ START_TEST(test_valid_property) {
         size_t element_length;
     } sources[] = {
         {
-            source: "            a-simple-property                ",
-            tokens_number: 1,
-            element_length: strlen("a-simple-property"),
+            source : "            a-simple-property                ",
+            tokens_number : 1,
+            element_length : strlen("a-simple-property"),
         },
         {
-            source: "   \t   \n /*abc  */  url (\"some-url\")      ;",
-            tokens_number: 1,
-            element_length: strlen("url"),
+            source : "   \t   \n /*abc  */  url (\"some-url\")      ;",
+            tokens_number : 1,
+            element_length : strlen("url"),
         },
         {
-            source: "some-value,  \t   \n /*abc  */ 'and some more'      ;",
-            tokens_number: 1,
-            element_length: strlen("some-value"),
+            source : "some-value,  \t   \n /*abc  */ 'and some more'      ;",
+            tokens_number : 1,
+            element_length : strlen("some-value"),
         },
         {0, 0, 0}};
     for (size_t i = 0; sources[i].source != 0; i++) {
@@ -160,33 +160,35 @@ START_TEST(test_valid_property) {
 }
 END_TEST
 
+#define VALUE_TESTS_NUMBER 3
+static const struct {
+    char const* source;
+    size_t tokens_number;
+    size_t element_length;
+} value_tests[VALUE_TESTS_NUMBER] = {
+    {
+        .source =  "            a-simple-value                ",
+        .tokens_number =  1,
+        .element_length =  strlen("a-simple-value"),
+    },
+    {
+        .source =  "   \t   \n /*abc  */  url (\"some-url\")      ;",
+        .tokens_number =  5,
+        .element_length =  strlen("url (\"some-url\")"),
+    },
+    {
+        .source =  "some-value,  \t   \n /*abc  */ 'and some more'      ;",
+        .tokens_number =  5,
+        .element_length =  strlen("url (\"some-url\")"),
+    }};
+
 START_TEST(test_valid_value) {
-    struct {
-        char const* source;
-        size_t tokens_number;
-        size_t element_length;
-    } sources[] = {
-        {
-            source: "            a-simple-value                ",
-            tokens_number: 1,
-            element_length: strlen("a-simple-value"),
-        },
-        {
-            source: "   \t   \n /*abc  */  url (\"some-url\")      ;",
-            tokens_number: 5,
-            element_length: strlen("url (\"some-url\")"),
-        },
-        {
-            source: "some-value,  \t   \n /*abc  */ 'and some more'      ;",
-            tokens_number: 5,
-            element_length: strlen("url (\"some-url\")"),
-        },
-        {0, 0, 0}};
-    for (size_t i = 0; sources[i].source != 0; i++) {
+
+    for (size_t i = 0; value_tests[i].source != 0; i++) {
         struct token* first_token = 0;
         size_t tokens_number = 0;
         struct lexical_error lexical_error;
-        enum token_status result = parse_tokens(&first_token, &tokens_number, sources[i].source, &lexical_error);
+        enum token_status result = parse_tokens(&first_token, &tokens_number, value_tests[i].source, &lexical_error);
         ck_assert_int_eq(result, token_found);
 
         struct element value;
@@ -195,8 +197,8 @@ START_TEST(test_valid_value) {
 
         ck_assert_int_eq(value_result, element_found);
         ck_assert_int_eq(value.type, element_value);
-        ck_assert_int_eq(element_length(&value), sources[i].element_length);
-        ck_assert_int_eq(element_token_length(&value), sources[i].tokens_number);
+        ck_assert_int_eq(element_length(&value), value_tests[i].element_length);
+        ck_assert_int_eq(element_token_length(&value), value_tests[i].tokens_number);
     }
 }
 END_TEST

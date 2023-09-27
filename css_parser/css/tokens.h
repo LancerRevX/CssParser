@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <regex.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -73,6 +74,7 @@ static char const* const token_names[] = {
 typedef struct token {
     enum token_type type;
     const char* pointer;
+    const char* string;
     size_t length;
 
     struct token* next;
@@ -93,7 +95,15 @@ typedef enum token_status {
 
 typedef token_status(get_token_function)(struct token*, char const*, size_t, struct lexical_error*);
 
-void free_tokens(struct token** first_token);
+inline struct token* token_get(struct token* first_token, size_t i) {
+    struct token* token = first_token;
+    for (size_t j = 0; j < i; j++) {
+        token = token->next;
+    }
+    return token;
+}
+
+void free_tokens(struct token* first_token);
 
 get_token_function get_space_token;
 get_token_function get_single_char_token;

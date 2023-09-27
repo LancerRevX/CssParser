@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include <stdlib.h>
 
 #include <check.h>
@@ -80,12 +81,53 @@ START_TEST(identifier_test) {
 }
 END_TEST
 
+#define STRING_TESTS_NUMBER 3
+static const struct {
+    char const* source;
+    bool valid;
+    size_t index;
+    char const* string;
+} string_tests[STRING_TESTS_NUMBER] = {
+    {
+        .source = "   \n \t \"quoted-string   ;\"  ;",
+        .valid = true,
+        .index = 1,
+        .string = "\"quoted-string   ;\"",
+    },
+    {
+        .source = "'some string \" with double quote inside ' ",
+        .valid = true,
+        .index = 0,
+        .string = "'some string \" with double quote inside '",
+    },
+    {.source = " 'invalid string (unclosed) ",
+     .valid = false,
+     .index = 0,
+     .string = 0}};
+
+START_TEST(test_quoted_string) {
+    struct token* first_token;
+    size_t tokens_number;
+    struct lexical_error error;
+    enum token_status result = parse_tokens(&first_token, &tokens_number, string_tests[_i].source, &error);
+
+    if (string_tests[_i].valid) {
+        ck_assert_int_eq(result, token_found);
+        struct token* token = token_get(first_token, string_tests[_i].index);
+        ck_assert_int_eq(token->type, token_string);
+        ck_assert_str_eq(token->string, string_tests[_i].string);
+    } else {
+        ck_assert_int_eq(result, token_error);
+    }
+}
+END_TEST
+
 START_TEST(parse_tokens_case1) {
-    char const* source = "/* abc comment */" // 1
-        "selector,another_selector{" // 4
-            "property:value;" // 4
-            "another_property:\"quoted-value\";" // 6 (2 quotes)
-    "}"; // 1
+    char const* source = "/* abc comment */"                  // 1
+                         "selector,another_selector{"         // 4
+                         "property:value;"                    // 4
+                         "another_property:\"quoted-value\";" // 6 (2 quotes)
+                         "}";                                 // 1
     struct token* first_token;
     size_t tokens_number;
     struct lexical_error error;
@@ -96,12 +138,11 @@ START_TEST(parse_tokens_case1) {
 }
 END_TEST
 
-
 START_TEST(parse_tokens_invalid_token) {
     char const* source = "/* abc comment */"
-        "selector,another_selector${" // $ <--
-            "property:value;"
-    "}";
+                         "selector,another_selector${" // $ <--
+                         "property:value;"
+                         "}";
     struct token* first_token;
     size_t tokens_number;
     struct lexical_error error;
@@ -118,12 +159,16 @@ Suite* test_tokens_suite() {
     TCase* identifiers = tcase_create("Identifiers");
     tcase_add_test(identifiers, identifier_test);
 
+    TCase* strings = tcase_create("Strings");
+    tcase_add_loop_test(strings, test_quoted_string, 0, STRING_TESTS_NUMBER);
+
     TCase* parse = tcase_create("Parse");
     // tcase_add_test(parse, parse_tokens_case1);
     tcase_add_test(parse, parse_tokens_invalid_token);
 
     suite_add_tcase(suite, identifiers);
     suite_add_tcase(suite, parse);
+    suite_add_tcase(suite, strings);
 
     return suite;
 }
