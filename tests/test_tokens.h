@@ -153,7 +153,7 @@ START_TEST(parse_tokens_invalid_token) {
 }
 END_TEST
 
-Suite* test_tokens_suite() {
+Suite* test_tokens_suite(void) {
     Suite* suite = suite_create("Tokens");
 
     TCase* identifiers = tcase_create("Identifiers");

@@ -2,9 +2,6 @@
 
 #include "css/elements.h"
 
-enum element_status parse_elements_from_source(char const* source, struct element** first_element, struct syntax_error* error) {
-}
-
 START_TEST(rule_set_valid) {
     struct {
         char const* source;
@@ -19,9 +16,9 @@ START_TEST(rule_set_valid) {
             "   proerty2_: url(some url);"
             "   property3: 'a string with unmatched parenthesis (  123';"
             "}",
-            is_valid : true,
-            selectors_number : 2,
-            declarations_number : 3,
+            .is_valid = true,
+            .selectors_number = 2,
+            .declarations_number = 3,
         }};
 
     for (size_t i = 0; i < 1; i++) {
@@ -76,12 +73,12 @@ START_TEST(test_regular_at_rule) {
     struct token* first_token = 0;
     size_t tokens_number = 0;
     struct lexical_error lexical_error;
-    enum token_status token_status = parse_tokens(&first_token, &tokens_number, source, &lexical_error);
-    ck_assert_int_eq(token_status, token_found);
+    enum token_status token_result = parse_tokens(&first_token, &tokens_number, source, &lexical_error);
+    ck_assert_int_eq(token_result, token_found);
 
     struct element at_rule;
     struct syntax_error syntax_error;
-    enum element_status at_rule_result = parse_at_rule(&first_token, &at_rule, &syntax_error);
+    enum element_status at_rule_result = parse_at_rule(first_token, &at_rule, &syntax_error);
 
     ck_assert_int_eq(at_rule_result, element_found);
     ck_assert_int_eq(at_rule.type, element_regular_at_rule);
@@ -91,159 +88,159 @@ START_TEST(test_regular_at_rule) {
 }
 END_TEST
 
-START_TEST(test_valid_declaration) {
-    char const* source = "   \t   \n /*abc  */  some-property  :   url (\"some-url\")      ;";
+struct property_test {
+    char const* source;
+    char const* token_string;
+};
+
+static struct property_test property_tests[] = {
+    {
+        .source = "            a-simple-property                ",
+        .token_string = "a-simple-property",
+    },
+    {
+        .source = "   \t   \n /*abc  */  url (\"some-url\")      ;",
+        .token_string = "url",
+    },
+    {
+        .source = "some-value,  \t   \n /*abc  */ 'and some more'      ;",
+        .token_string = "some-value",
+    }};
+
+START_TEST(test_valid_property) {
     struct token* first_token = 0;
     size_t tokens_number = 0;
     struct lexical_error lexical_error;
-    enum token_status token_status = parse_tokens(&first_token, &tokens_number, source, &lexical_error);
-    ck_assert_int_eq(token_status, token_found);
+    enum token_status result = parse_tokens(&first_token, &tokens_number, property_tests[_i].source, &lexical_error);
+    ck_assert_int_eq(result, token_found);
 
-    struct element declaration;
+    struct element property;
     struct syntax_error syntax_error;
-    enum element_status declaration_result = parse_declaration(&first_token, &declaration, &syntax_error);
+    enum element_status property_result = parse_property(first_token, &property, &syntax_error);
 
-    ck_assert_int_eq(declaration_result, element_found);
-    ck_assert_int_eq(declaration.type, element_declaration);
-    ck_assert_int_eq(element_length(&declaration), strlen("some-property  :   url (\"some-url\")"));
-    ck_assert_int_eq(element_token_length(&declaration), 9);
-    ck_assert_int_eq(declaration.start->type, token_identifier);
-    ck_assert_int_eq(declaration.end->type, token_parentheses_end);
-
-    struct element* property = declaration.first_child;
-    ck_assert_int_eq(property->type, element_property);
-    ck_assert_int_eq(element_length(property), strlen("some-property"));
-
-    struct element* value = property->next;
-    ck_assert_int_eq(value->type, element_value);
+    ck_assert_int_eq(property_result, element_found);
+    ck_assert_int_eq(property.type, element_property);
+    ck_assert_int_eq(element_token_length(&property), 1);
+    ck_assert_int_eq(element_length(&property), strlen(property_tests[_i].token_string));
+    ck_assert_str_eq(property.start->string, property_tests[_i].token_string);
 }
 END_TEST
 
-START_TEST(test_valid_property) {
-    struct {
-        char const* source;
-        size_t tokens_number;
-        size_t element_length;
-    } sources[] = {
-        {
-            source : "            a-simple-property                ",
-            tokens_number : 1,
-            element_length : strlen("a-simple-property"),
-        },
-        {
-            source : "   \t   \n /*abc  */  url (\"some-url\")      ;",
-            tokens_number : 1,
-            element_length : strlen("url"),
-        },
-        {
-            source : "some-value,  \t   \n /*abc  */ 'and some more'      ;",
-            tokens_number : 1,
-            element_length : strlen("some-value"),
-        },
-        {0, 0, 0}};
-    for (size_t i = 0; sources[i].source != 0; i++) {
-        struct token* first_token = 0;
-        size_t tokens_number = 0;
-        struct lexical_error lexical_error;
-        enum token_status result = parse_tokens(&first_token, &tokens_number, sources[i].source, &lexical_error);
-        ck_assert_int_eq(result, token_found);
-
-        struct element property;
-        struct syntax_error syntax_error;
-        enum element_status property_result = parse_property(first_token, &property, &syntax_error);
-
-        ck_assert_int_eq(property_result, element_found);
-        ck_assert_int_eq(property.type, element_property);
-        ck_assert_int_eq(element_length(&property), sources[i].element_length);
-        ck_assert_int_eq(element_token_length(&property), sources[i].tokens_number);
-    }
-}
-END_TEST
-
-#define VALUE_TESTS_NUMBER 3
-static const struct {
+struct value_test {
     char const* source;
     size_t tokens_number;
     size_t element_length;
-} value_tests[VALUE_TESTS_NUMBER] = {
+    char const* start_token_string;
+    char const* end_token_string;
+};
+
+struct value_test value_tests[] = {
     {
-        .source =  "            a-simple-value                ",
-        .tokens_number =  1,
-        .element_length =  strlen("a-simple-value"),
+        .source = "            a-simple-value                ",
+        .tokens_number = 1,
+        .element_length = strlen("a-simple-value"),
+        .start_token_string = "a-simple-value",
+        .end_token_string = "a-simple-value",
     },
     {
-        .source =  "   \t   \n /*abc  */  url (\"some-url\")      ;",
-        .tokens_number =  5,
-        .element_length =  strlen("url (\"some-url\")"),
+        .source = "   \t   \n /*abc  */  url (\"some-url\")      ;",
+        .tokens_number = 5,
+        .element_length = strlen("url (\"some-url\")"),
+        .start_token_string = "url",
+        .end_token_string = ")",
     },
     {
-        .source =  "some-value,  \t   \n /*abc  */ 'and some more'      ;",
-        .tokens_number =  5,
-        .element_length =  strlen("url (\"some-url\")"),
+        .source = "some-value,  \t   \n /*abc  */ 'and some more'      ;",
+        .tokens_number = 6,
+        .element_length = strlen("some-value,  \t   \n /*abc  */ 'and some more'"),
+        .start_token_string = "some-value",
+        .end_token_string = "'and some more'",
     }};
 
 START_TEST(test_valid_value) {
 
-    for (size_t i = 0; value_tests[i].source != 0; i++) {
-        struct token* first_token = 0;
-        size_t tokens_number = 0;
-        struct lexical_error lexical_error;
-        enum token_status result = parse_tokens(&first_token, &tokens_number, value_tests[i].source, &lexical_error);
-        ck_assert_int_eq(result, token_found);
+    struct token* first_token = 0;
+    size_t tokens_number = 0;
+    struct lexical_error lexical_error;
+    enum token_status result = parse_tokens(&first_token, &tokens_number, value_tests[_i].source, &lexical_error);
+    ck_assert_int_eq(result, token_found);
 
-        struct element value;
-        struct syntax_error syntax_error;
-        enum element_status value_result = parse_value(first_token, &value, &syntax_error);
+    struct element value;
+    struct syntax_error syntax_error;
+    enum element_status value_result = parse_value(first_token, &value, &syntax_error);
 
-        ck_assert_int_eq(value_result, element_found);
-        ck_assert_int_eq(value.type, element_value);
-        ck_assert_int_eq(element_length(&value), value_tests[i].element_length);
-        ck_assert_int_eq(element_token_length(&value), value_tests[i].tokens_number);
-    }
+    ck_assert_int_eq(value_result, element_found);
+    ck_assert_int_eq(value.type, element_value);
+    ck_assert_int_eq(element_token_length(&value), value_tests[_i].tokens_number);
+    ck_assert_int_eq(element_length(&value), value_tests[_i].element_length);
+    ck_assert_str_eq(value.start->string, value_tests[_i].start_token_string);
+    ck_assert_str_eq(value.end->string, value_tests[_i].end_token_string);
 }
 END_TEST
 
-// START_TEST(test_valid_declaration) {
-//     char const* source = "   \t   \n /*abc  */  some-property  :   url (\"some-url\")      ;";
-//     struct token* first_token = 0;
-//     size_t tokens_number = 0;
-//     struct lexical_error lexical_error;
-//     enum token_status token_status = parse_tokens(&first_token, &tokens_number, source, &lexical_error);
-//     ck_assert_int_eq(token_status, token_found);
+struct declaration_test {
+    char const* source;
+    size_t declaration_length;
+    char const* property_string;
+    size_t value_length;
+};
 
-//     struct element declaration;
-//     struct syntax_error syntax_error;
-//     enum element_status declaration_result = parse_declaration(&first_token, &declaration, &syntax_error);
+static struct declaration_test declaration_tests[] = {
+    {
+        .source = "   \n \t   some-property    :    some-value    ( nested \n value   \t );   abc",
+        .declaration_length = strlen("some-property    :    some-value    ( nested \n value   \t )"),
+        .property_string = "some-property",
+        .value_length = strlen("some-value    ( nested \n value   \t )"),
+    },
+    {
+        .source = "background-color: red",
+        .declaration_length = strlen("background-color: red"),
+        .property_string = "background-color",
+        .value_length = strlen("red"),
+    },
+};
 
-//     ck_assert_int_eq(declaration_result, element_found);
-//     ck_assert_int_eq(declaration.type, element_declaration);
-//     ck_assert_int_eq(element_length(&declaration), strlen("some-property  :   url (\"some-url\")"));
-//     ck_assert_int_eq(element_token_length(&declaration), 9);
-//     ck_assert_int_eq(declaration.start->type, token_identifier);
-//     ck_assert_int_eq(declaration.end->type, token_parentheses_end);
+START_TEST(test_valid_declaration) {
+    struct token* first_token = 0;
+    size_t tokens_number = 0;
+    struct lexical_error lexical_error;
+    enum token_status token_result = parse_tokens(&first_token, &tokens_number, declaration_tests[_i].source, &lexical_error);
+    ck_assert_int_eq(token_result, token_found);
 
-//     struct element* property = declaration.first_child;
-//     ck_assert_int_eq(property->type, element_property);
-//     ck_assert_int_eq(element_length(property), strlen("some-property"));
+    struct element declaration;
+    struct syntax_error syntax_error;
+    enum element_status declaration_result = parse_declaration(first_token, &declaration, &syntax_error);
 
-//     struct element* value = property->next;
-//     ck_assert_int_eq(value->type, element_value);
-// }
-// END_TEST
+    ck_assert_msg(declaration_result == element_found, "parse declaration error: %s; token: %s", syntax_error.message, syntax_error.token->string);
 
-Suite* test_elements_suite() {
+    ck_assert_int_eq(declaration.type, element_declaration);
+    ck_assert_int_eq(element_length(&declaration), declaration_tests[_i].declaration_length);
+
+    struct element* property = declaration.first_child;
+    ck_assert_int_eq(property->type, element_property);
+    ck_assert_int_eq(element_length(property), strlen(declaration_tests[_i].property_string));
+    ck_assert_str_eq(property->start->string, declaration_tests[_i].property_string);
+
+    struct element* value = property->next;
+    ck_assert_int_eq(value->type, element_value);
+    ck_assert_int_eq(element_length(value), declaration_tests[_i].value_length);
+}
+END_TEST
+
+Suite* get_elements_test_suite(void) {
     Suite* suite = suite_create("Elements");
 
     // TCase* rule_sets = tcase_create("Rule set");
     // tcase_add_test(rule_sets, rule_set_valid);
 
-    TCase* common = tcase_create("Common element");
-    tcase_add_test(common, test_valid_property);
-    tcase_add_test(common, test_valid_value);
+    TCase* common = tcase_create("Common");
+    tcase_add_loop_test(common, test_valid_property, 0, sizeof(property_tests) / sizeof(struct property_test));
+    tcase_add_loop_test(common, test_valid_value, 0, sizeof(value_tests) / sizeof(struct value_test));
+    tcase_add_loop_test(common, test_valid_declaration, 0, sizeof(declaration_tests) / sizeof(struct declaration_test));
 
     TCase* at_rules = tcase_create("At rules");
     tcase_add_test(at_rules, test_at_rule_rule);
-    tcase_add_test(at_rules, test_valid_declaration);
+    // tcase_add_loop_test(at_rules, test_declarations, 0, DECLARATION_TESTS_NUMBER);
 
     // suite_add_tcase(suite, rule_sets);
     suite_add_tcase(suite, common);

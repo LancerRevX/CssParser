@@ -123,6 +123,9 @@ size_t element_token_length(struct element* element) {
 size_t element_add_child(struct element* element, struct element* new_child) {
     if (element->first_child == 0) {
         element->first_child = new_child;
+
+        element->start = new_child->start;
+
         return 1;
     } else {
         size_t i = 1;
@@ -132,8 +135,19 @@ size_t element_add_child(struct element* element, struct element* new_child) {
             i++;
         }
         child->next = new_child;
+
+        element->end = new_child->end;
+
         return i + 1;
     }
+}
+
+void element_init(struct element* element, enum element_type type) {
+    element->type = type;
+    element->start = 0;
+    element->end = 0;
+    element->first_child = 0;
+    element->next = 0;
 }
 
 void element_print_content(struct element* element) {
@@ -278,6 +292,8 @@ element_status parse_value(struct token* first_token, struct element* value, str
 element_status parse_declaration(struct token* first_token, struct element* declaration, struct syntax_error* error) {
     struct token* token = first_token;
 
+    element_init(declaration, element_declaration);
+
     struct element* property = malloc(sizeof(struct element));
     enum element_status result = parse_property(token, property, error);
     if (result != element_found) {
@@ -285,9 +301,7 @@ element_status parse_declaration(struct token* first_token, struct element* decl
         return result;
     }
 
-    declaration->start = token;
     element_add_child(declaration, property);
-    token = property->end->next;
 
     while (1) {
         if (!token) {
@@ -448,6 +462,7 @@ element_status parse_at_rule_rule(struct token* first_token, struct element* rul
 }
 
 element_status parse_conditional_group_block(struct token* first_token, struct element* element, struct syntax_error* error) {
+    return element_found;
 }
 
 element_status parse_at_rule(struct token* first_token, struct element* at_rule, struct syntax_error* error) {
@@ -532,7 +547,7 @@ element_status parse_elements(struct token* first_token, struct element** first_
             token = token->next;
             continue;
         case token_at:
-            parse_at_rule(&token, element, error);
+            parse_at_rule(token, element, error);
             break;
         case token_dot:
         case token_hash:

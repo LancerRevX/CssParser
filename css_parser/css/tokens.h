@@ -95,13 +95,7 @@ typedef enum token_status {
 
 typedef token_status(get_token_function)(struct token*, char const*, size_t, struct lexical_error*);
 
-inline struct token* token_get(struct token* first_token, size_t i) {
-    struct token* token = first_token;
-    for (size_t j = 0; j < i; j++) {
-        token = token->next;
-    }
-    return token;
-}
+struct token* token_get(struct token* first_token, size_t i);
 
 void free_tokens(struct token* first_token);
 

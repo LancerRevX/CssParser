@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "tokens.h"
 
@@ -10,7 +12,17 @@ void free_tokens(struct token* token) {
 }
 
 void token_set_string(struct token* token, char const* source, size_t length) {
-    asprintf(&(token->string), "%.*s", (int)length, source);
+    char* string = calloc(length + 1, sizeof(char));
+    snprintf(string, length + 1, "%s", source);
+    token->string = string;
+}
+
+struct token* token_get(struct token* first_token, size_t i) {
+    struct token* token = first_token;
+    for (size_t j = 0; j < i; j++) {
+        token = token->next;
+    }
+    return token;
 }
 
 typedef token_status(get_token_function)(struct token*, char const*, size_t, struct lexical_error*);

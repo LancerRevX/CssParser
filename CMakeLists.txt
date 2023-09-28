@@ -5,12 +5,23 @@ set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 include(CTest)
 enable_testing()
-include_directories(C:/msys64/mingw64/include)
+
+set(C_STANDARD 99)
+
+add_compile_options(-Wall 
+                    -Wextra 
+                    -pedantic 
+                    -Wshadow
+                    -Werror
+                    -Wno-error=pedantic
+                    -Wno-error=unused-but-set-variable 
+                    -Wno-error=unused-parameter 
+                    -Wno-error=unused-variable 
+                    -O1)
+
 add_subdirectory(tests)
 
 add_subdirectory(css_parser)
-
-
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
