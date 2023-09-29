@@ -23,6 +23,10 @@ enum token_type {
     token_at,
     token_exclamation,
     token_percent,
+    token_greater_than,
+    token_slash,
+    token_plus,
+    token_minus,
 
     token_space,
     token_comment,
@@ -46,7 +50,12 @@ static char const single_char_tokens[] = {
     [token_at] = '@',
     [token_exclamation] = '!',
     [token_percent] = '%',
-    0};
+    [token_greater_than] = '>',
+    [token_slash] = '/',
+    [token_plus] = '+',
+    [token_minus] = '-',
+    0,
+};
 
 static char const* const token_names[] = {
     [token_block_start] = "Block start",
@@ -63,13 +72,18 @@ static char const* const token_names[] = {
     [token_at] = "@",
     [token_exclamation] = "Exclamation (!)",
     [token_percent] = "Percent sign (%)",
+    [token_greater_than] = "Greater than (>)",
+    [token_slash] = "'/'",
+    [token_plus] = "'+'",
+    [token_minus] = "'-'",
 
     [token_space] = "Space",
     [token_comment] = "Comment",
     [token_identifier] = "Identifier",
     [token_string] = "Quoted string",
     [token_number] = "Number",
-    0};
+    0,
+};
 
 typedef struct token {
     enum token_type type;

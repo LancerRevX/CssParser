@@ -2,53 +2,6 @@
 
 #include "css/elements.h"
 
-START_TEST(rule_set_valid) {
-    struct {
-        char const* source;
-        bool is_valid;
-        size_t selectors_number;
-        size_t declarations_number;
-    } tests[10] = {
-        {
-            "#some-selector .chlid-selector,"
-            "selector-2 > selector2-child {"
-            "   property1: value1;"
-            "   proerty2_: url(some url);"
-            "   property3: 'a string with unmatched parenthesis (  123';"
-            "}",
-            .is_valid = true,
-            .selectors_number = 2,
-            .declarations_number = 3,
-        }};
-
-    for (size_t i = 0; i < 1; i++) {
-        struct token* first_token;
-        size_t tokens_number;
-        struct lexical_error error;
-        parse_tokens(&first_token, &tokens_number, tests[i].source, &error);
-
-        struct element element;
-        struct syntax_error syntax_error;
-        int result = get_rule_set(&first_token, &element, &syntax_error);
-        if (tests[i].is_valid) {
-            ck_assert_int_eq(result, element_found);
-            ck_assert_int_eq(element.type, element_rule_set);
-            ck_assert_ptr_nonnull(element.first_child);
-            ck_assert_int_eq(
-                count_elements_of_type(&element, element_selector),
-                tests[i].selectors_number
-            );
-            ck_assert_int_eq(
-                count_elements_of_type(&element, element_declaration),
-                tests[i].declarations_number
-            );
-        } else {
-            ck_assert_int_eq(result, element_error);
-        }
-    }
-}
-END_TEST
-
 START_TEST(test_at_rule_rule) {
     char const* source = "(max-width: 100px) { /* some rule sets */ }";
     struct token* first_token = 0;
@@ -65,26 +18,6 @@ START_TEST(test_at_rule_rule) {
     ck_assert_int_eq(element_length(&rule), 18);
     ck_assert_int_eq(rule.start->type, token_parentheses_start);
     ck_assert_int_eq(rule.end->type, token_parentheses_end);
-}
-END_TEST
-
-START_TEST(test_regular_at_rule) {
-    char const* source = "@charset \"utf-8\"; something else ;";
-    struct token* first_token = 0;
-    size_t tokens_number = 0;
-    struct lexical_error lexical_error;
-    enum token_status token_result = parse_tokens(&first_token, &tokens_number, source, &lexical_error);
-    ck_assert_int_eq(token_result, token_found);
-
-    struct element at_rule;
-    struct syntax_error syntax_error;
-    enum element_status at_rule_result = parse_at_rule(first_token, &at_rule, &syntax_error);
-
-    ck_assert_int_eq(at_rule_result, element_found);
-    ck_assert_int_eq(at_rule.type, element_regular_at_rule);
-    ck_assert_int_eq(element_length(&at_rule), 16);
-    ck_assert_int_eq(at_rule.start->type, token_at);
-    ck_assert_int_eq(at_rule.end->type, token_string);
 }
 END_TEST
 
@@ -105,7 +38,8 @@ static struct property_test property_tests[] = {
     {
         .source = "some-value,  \t   \n /*abc  */ 'and some more'      ;",
         .token_string = "some-value",
-    }};
+    },
+};
 
 START_TEST(test_valid_property) {
     struct token* first_token = 0;
@@ -155,7 +89,8 @@ struct value_test value_tests[] = {
         .element_length = strlen("some-value,  \t   \n /*abc  */ 'and some more'"),
         .start_token_string = "some-value",
         .end_token_string = "'and some more'",
-    }};
+    },
+};
 
 START_TEST(test_valid_value) {
 
@@ -227,23 +162,324 @@ START_TEST(test_valid_declaration) {
 }
 END_TEST
 
+struct declaration_block_test {
+    char const* source;
+    size_t declarations_number;
+};
+
+static struct declaration_block_test declaration_block_tests[] = {
+    {
+        .source = "    {  "
+                  " \t some-property: some-value ( 'quoted string' something) \n"
+                  "  }   ",
+        .declarations_number = 1,
+    },
+    {
+        .source = "  {a-property: a-value;"
+                  "property-2: url('somewhere.com')"
+                  "}",
+        .declarations_number = 2,
+    },
+};
+
+START_TEST(test_declaration_block) {
+    struct token* first_token = 0;
+    size_t tokens_number = 0;
+    struct lexical_error lexical_error;
+    enum token_status token_result = parse_tokens(&first_token, &tokens_number, declaration_block_tests[_i].source, &lexical_error);
+    ck_assert_int_eq(token_result, token_found);
+
+    struct element declaration_block;
+    struct syntax_error syntax_error;
+    enum element_status declaration_block_result = parse_declaration_block(first_token, &declaration_block, &syntax_error);
+
+    ck_assert_msg(declaration_block_result == element_found, "parse error: %s; token: %s", syntax_error.message, syntax_error.token->string);
+    ck_assert_int_eq(declaration_block.type, element_declaration_block);
+
+    ck_assert_int_eq(declaration_block.start->type, token_block_start);
+    ck_assert_int_eq(declaration_block.end->type, token_block_end);
+    ck_assert_int_eq(element_count_children(&declaration_block), declaration_block_tests[_i].declarations_number);
+}
+END_TEST
+
+struct selector_list_test {
+    char const* source;
+    bool valid;
+    size_t selectors_number;
+};
+
+static struct selector_list_test selector_list_tests[] = {
+    {
+        .source = "abc, selector-2, #some-id > .some-class",
+        .valid = true,
+        .selectors_number = 3,
+    },
+};
+
+START_TEST(test_selector_list) {
+    struct token* first_token = 0;
+    size_t tokens_number = 0;
+    struct lexical_error lexical_error;
+    enum token_status token_result = parse_tokens(&first_token, &tokens_number, selector_list_tests[_i].source, &lexical_error);
+    ck_assert_int_eq(token_result, token_found);
+
+    struct element selector_list;
+    struct syntax_error syntax_error;
+    enum element_status selector_list_result = parse_selector_list(first_token, &selector_list, &syntax_error);
+
+    if (selector_list_tests[_i].valid) {
+        ck_assert_msg(selector_list_result == element_found, "parse error: %s; token: %s", syntax_error.message, syntax_error.token->string);
+
+        ck_assert_int_eq(selector_list.type, element_selector_list);
+        ck_assert_int_eq(element_count_children(&selector_list), selector_list_tests[_i].selectors_number);
+    } else {
+        ck_assert_int_eq(selector_list_result, element_error);
+    }
+}
+END_TEST
+
+struct rule_set_test {
+    char const* source;
+    bool valid;
+    size_t selectors_number;
+    size_t declarations_number;
+};
+
+struct rule_set_test rule_set_tests[] = {
+    {
+        .source = "#some-selector-1,selector-2>selector-2-child\tanother-child \n"
+                  "  {"
+                  "some-property-1\n"
+                  ":some-value"
+                  ";"
+                  "background: red;"
+                  "background-image: url('somewhere.com');"
+                  "}",
+        .valid = true,
+        .selectors_number = 2,
+        .declarations_number = 3,
+    },
+    {
+        .source = "#my-block {"
+                  " my-property: my-value;"
+                  " calc-prop: calc(var(--some-var) + var(--some-value) / 14.0)"
+                  "}",
+        .valid = true,
+        .selectors_number = 1,
+        .declarations_number = 2,
+    },
+    {
+        .source = ".my-button {"
+                  "display: flex;"
+                  "flex-direction: row;"
+                  "justify-content: center;"
+                  "align-items: center;"
+                  "gap: 0.4em;"
+                  "max-width: 100%;"
+                  "padding: 14px 20px;"
+                  "box-sizing: border-box;"
+                  "text-transform: uppercase;"
+                  "background-color: #f3f3f3;"
+                  "color: #3e3e3e; "
+                  "font-size: 13px;"
+                  "font-weight: 600;"
+                  "line-height: 18px;"
+                  "text-align: center;"
+                  "}",
+        .valid = true,
+        .selectors_number = 1,
+        .declarations_number = 15,
+    },
+    {
+        .source = ".my-button {"
+                  "display: flex;"
+                  "flex-direction: row;"
+                  "justify-content: center;"
+                  "align-items: center;"
+                  "gap: 0.4em;"
+                  "max-width: 100%;"
+                  "padding: 14px 20px;"
+                  "box-sizing: border-box;"
+                  "text-transform: uppercase;"
+                  "background-color: #f3f3f3;"
+                  "color: #3e3e3e; "
+                  "font-size: 13px;"
+                  "font-weight: 600;"
+                  "line-height: 18px;"
+                  "text-align: center;"
+                  "", // <--
+        .valid = false,
+    },
+    {
+        .source = ".my-button " // <--
+                  "display: flex;"
+                  "flex-direction: row;"
+                  "justify-content: center;"
+                  "align-items: center;"
+                  "gap: 0.4em;"
+                  "max-width: 100%;"
+                  "padding: 14px 20px;"
+                  "box-sizing: border-box;"
+                  "text-transform: uppercase;"
+                  "background-color: #f3f3f3;"
+                  "color: #3e3e3e; "
+                  "font-size: 13px;"
+                  "font-weight: 600;"
+                  "line-height: 18px;"
+                  "text-align: center;"
+                  "}",
+        .valid = false,
+    },
+    {
+        .source = "\n \t   {" // <--
+                  "display: flex;"
+                  "flex-direction: row;"
+                  "justify-content: center;"
+                  "align-items: center;"
+                  "gap: 0.4em;"
+                  "max-width: 100%;"
+                  "padding: 14px 20px;"
+                  "box-sizing: border-box;"
+                  "text-transform: uppercase;"
+                  "background-color: #f3f3f3;"
+                  "color: #3e3e3e; "
+                  "font-size: 13px;"
+                  "font-weight: 600;"
+                  "line-height: 18px;"
+                  "text-align: center;"
+                  "}",
+        .valid = false,
+    },
+    {
+        .source = ".selector {"
+                  "display: flex;"
+                  "flex-direction: row;"
+                  "justify-content: center;"
+                  "align-items: center;"
+                  "gap: 0.4em;"
+                  "max-width: 100%;"
+                  "padding: 14px 20px;"
+                  "box-sizing: border-box;"
+                  "text-transform: uppercase;"
+                  "background-color: #f3f3f3;"
+                  "color: #3e3e3e; "
+                  "font-size: 13px;"
+                  "font-weight: 600;"
+                  "line-height: 18px" // <--
+                  "text-align: center;"
+                  "}",
+        .valid = false,
+    },
+};
+
+START_TEST(test_rule_set) {
+    struct token* first_token = 0;
+    size_t tokens_number = 0;
+    struct lexical_error lexical_error;
+    enum token_status token_result = parse_tokens(&first_token, &tokens_number, rule_set_tests[_i].source, &lexical_error);
+    ck_assert_int_eq(token_result, token_found);
+
+    struct element rule_set;
+    struct syntax_error syntax_error;
+    enum element_status rule_set_result = parse_rule_set(first_token, &rule_set, &syntax_error);
+
+    if (rule_set_tests[_i].valid) {
+        ck_assert_msg(rule_set_result == element_found, "parse error: %s; token: %s", syntax_error.message, syntax_error.token->string);
+        ck_assert_int_eq(rule_set.type, element_rule_set);
+        ck_assert_int_eq(element_count_children(&rule_set), 2);
+
+        struct element* selector_list = rule_set.first_child;
+        ck_assert_int_eq(selector_list->type, element_selector_list);
+        ck_assert_int_eq(element_count_children(selector_list), rule_set_tests[_i].selectors_number);
+
+        struct element* declaration_block = selector_list->next;
+        ck_assert_int_eq(declaration_block->type, element_declaration_block);
+        ck_assert_int_eq(element_count_children(declaration_block), rule_set_tests[_i].declarations_number);
+
+        ck_assert_ptr_eq(rule_set.start, selector_list->start);
+        ck_assert_ptr_eq(rule_set.end, declaration_block->end);
+        ck_assert_int_eq(rule_set.end->type, token_block_end);
+    } else {
+        ck_assert_int_eq(rule_set_result, element_error);
+    }
+}
+END_TEST
+
+struct regular_at_rule_test {
+    char const* source;
+    bool valid;
+    size_t length;
+    char const* rule_string;
+};
+
+static struct regular_at_rule_test regular_at_rule_tests[] = {
+    {
+        .source = "   \n \t @charset      \"utf-8\";   abc something {}",
+        .valid = true,
+        .length = strlen("@charset      \"utf-8\""),
+        .rule_string = "\"utf-8\"",
+    },
+    {
+        .source = "   \n \t charset      \"utf-8\";   abc something {}", // <-- missing @
+        .valid = false,
+    },
+    {
+        .source = "   \n \t @abcdefg      \"utf-8\";   abc something {}", // <-- unknown at-rule
+        .valid = false,
+    },
+};
+
+
+
+START_TEST(test_regular_at_rule) {
+    struct token* first_token = 0;
+    size_t tokens_number = 0;
+    struct lexical_error lexical_error;
+    enum token_status token_result = parse_tokens(&first_token, &tokens_number, regular_at_rule_tests[_i].source, &lexical_error);
+    ck_assert_int_eq(token_result, token_found);
+
+    struct element regular_at_rule;
+    struct syntax_error syntax_error;
+    enum element_status regular_at_rule_result = parse_at_rule(first_token, &regular_at_rule, &syntax_error);
+
+    if (regular_at_rule_tests[_i].valid) {
+        ck_assert_msg(regular_at_rule_result == element_found, "parse error: %s; token: %s", syntax_error.message, syntax_error.token->string);
+        ck_assert_int_eq(regular_at_rule.type, element_regular_at_rule);
+        ck_assert_int_eq(regular_at_rule.start->type, token_at);
+        ck_assert_int_eq(element_count_children(&regular_at_rule), 1);
+        ck_assert_int_eq(element_length(&regular_at_rule), regular_at_rule_tests[_i].length);
+
+        struct element* at_rule_rule = regular_at_rule.first_child;
+        ck_assert_int_eq(at_rule_rule->type, element_at_rule_rule);
+        ck_assert_int_eq(element_length(at_rule_rule), strlen(regular_at_rule_tests[_i].rule_string));
+
+        ck_assert_ptr_eq(regular_at_rule.end, at_rule_rule->end);
+    } else {
+        ck_assert_int_eq(regular_at_rule_result, element_error);
+    }
+}
+END_TEST
+
 Suite* get_elements_test_suite(void) {
     Suite* suite = suite_create("Elements");
-
-    // TCase* rule_sets = tcase_create("Rule set");
-    // tcase_add_test(rule_sets, rule_set_valid);
 
     TCase* common = tcase_create("Common");
     tcase_add_loop_test(common, test_valid_property, 0, sizeof(property_tests) / sizeof(struct property_test));
     tcase_add_loop_test(common, test_valid_value, 0, sizeof(value_tests) / sizeof(struct value_test));
     tcase_add_loop_test(common, test_valid_declaration, 0, sizeof(declaration_tests) / sizeof(struct declaration_test));
+    tcase_add_loop_test(common, test_declaration_block, 0, sizeof(declaration_block_tests) / sizeof(struct declaration_block_test));
+
+    TCase* rule_sets = tcase_create("Rule set");
+    tcase_add_loop_test(rule_sets, test_selector_list, 0, sizeof(selector_list_tests) / sizeof(struct selector_list_test));
+    tcase_add_loop_test(rule_sets, test_rule_set, 0, sizeof(rule_set_tests) / sizeof(struct rule_set_test));
 
     TCase* at_rules = tcase_create("At rules");
     tcase_add_test(at_rules, test_at_rule_rule);
-    // tcase_add_loop_test(at_rules, test_declarations, 0, DECLARATION_TESTS_NUMBER);
+    tcase_add_loop_test(at_rules, test_regular_at_rule, 0, sizeof(regular_at_rule_tests) / sizeof(struct regular_at_rule_test));
 
     // suite_add_tcase(suite, rule_sets);
     suite_add_tcase(suite, common);
+    suite_add_tcase(suite, rule_sets);
     suite_add_tcase(suite, at_rules);
 
     return suite;

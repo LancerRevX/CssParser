@@ -174,8 +174,8 @@ token_status get_token(struct token* token, char const* source, size_t pos, stru
     get_token_function* get_token_functions[] = {
         get_space_token,
         get_comment_token,
-        get_single_char_token,
         get_identifier_token,
+        get_single_char_token,
         get_number_token,
         get_string_token,
         0};

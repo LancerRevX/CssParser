@@ -14,7 +14,9 @@ enum element_type {
     element_at_rule_rule,
     element_rule_set,
     element_selector,
+    element_selector_list,
     element_declaration,
+    element_declaration_block,
     element_property,
     element_value,
 
@@ -28,33 +30,11 @@ static char const* const element_name[] = {
     [element_at_rule_rule] = "Rule of at-rule",
     [element_rule_set] = "Rule set",
     [element_selector] = "Selector",
+    [element_selector_list] = "Selector list",
     [element_declaration] = "Declaration",
+    [element_declaration_block] = "Declaration block",
     [element_property] = "Property",
     [element_value] = "Value",
-};
-
-struct at_rule {
-    struct token* identifier;
-    struct element* rule;
-    struct element* block;
-};
-
-struct declaration {
-    struct element* property;
-    struct element* value;
-};
-
-struct rule_set {
-    struct element* selector_list;
-    struct element* declaration_block;
-};
-
-struct selector_list {
-    struct element* first_selector;
-};
-
-struct declaration_block {
-    struct element* first_declaration;
 };
 
 struct element {
@@ -76,7 +56,7 @@ const char* const regular_at_rules[] = {
     "charset",
     "import",
     "namespace",
-    0};
+};
 
 const char* const nested_at_rules[] = {
     "page",
@@ -86,13 +66,13 @@ const char* const nested_at_rules[] = {
     "font-feature-values",
     "property",
     "layer",
-    0};
+};
 
 const char* const conditional_group_at_rules[] = {
     "media",
     "supports",
     "document",
-    0};
+};
 
 void element_free(struct element* element) {
     if (element == 0) {
@@ -123,9 +103,6 @@ size_t element_token_length(struct element* element) {
 size_t element_add_child(struct element* element, struct element* new_child) {
     if (element->first_child == 0) {
         element->first_child = new_child;
-
-        element->start = new_child->start;
-
         return 1;
     } else {
         size_t i = 1;
@@ -135,9 +112,6 @@ size_t element_add_child(struct element* element, struct element* new_child) {
             i++;
         }
         child->next = new_child;
-
-        element->end = new_child->end;
-
         return i + 1;
     }
 }
@@ -154,7 +128,7 @@ void element_print_content(struct element* element) {
     printf("%.*s", (int)element_length(element), element->start->pointer);
 }
 
-void print_declaration(struct element* declaration) {
+void declaration_print(struct element* declaration) {
     struct element* property = declaration->first_child;
     struct element* value = property->next;
 
@@ -164,13 +138,21 @@ void print_declaration(struct element* declaration) {
     printf(";\n");
 }
 
+size_t element_count_children(struct element* element) {
+    size_t result = 0;
+    for (struct element* child = element->first_child; child != 0; child = child->next) {
+        result++;
+    }
+    return result;
+}
+
 void element_print_tree(struct element* element, size_t depth) {
     for (size_t i = 0; i < depth; i++) {
         printf("\t");
     }
 
     if (element->type == element_declaration) {
-        print_declaration(element);
+        declaration_print(element);
         return;
     }
 
@@ -215,7 +197,7 @@ element_status parse_property(struct token* first_token, struct element* propert
             property->next = 0;
             return element_found;
         default:
-            error->message = "unexpected token";
+            error->message = "unexpected token while parsing property";
             error->token = token;
             return element_error;
         }
@@ -237,8 +219,8 @@ element_status parse_value(struct token* first_token, struct element* value, str
     struct token* last_parenthesis = 0;
     size_t tokens_number = 0;
     size_t parentheses = 0;
-    while (token) {
-        if (token->type == token_block_end) {
+    while (1) {
+        if (!token || token->type == token_block_end) {
             break;
         }
 
@@ -246,28 +228,42 @@ element_status parse_value(struct token* first_token, struct element* value, str
             break;
         }
 
-        if (token->type == token_space || token->type == token_comment) {
+        switch (token->type) {
+        case token_space:
+        case token_comment:
             token = token->next;
             continue;
-        }
-
-        if (token->type == token_parentheses_start) {
+        case token_identifier:
+        case token_number:
+        case token_comma:
+        case token_string:
+        case token_percent:
+        case token_hash:
+            break;
+        case token_parentheses_start:
             parentheses++;
             last_parenthesis = token;
-        } else if (token->type == token_parentheses_end) {
-            if (parentheses > 0) {
-                parentheses--;
-            } else {
+            break;
+        case token_parentheses_end:
+            if (parentheses == 0) {
                 error->message = "unmatched closing parenthesis";
                 error->token = token;
                 return element_error;
             }
+            parentheses--;
+            break;
+        default:
+            if (parentheses == 0) {
+                error->message = "unexpected token while parsing value";
+                error->token = token;
+                return element_error;
+            }
+            break;
         }
 
         if (tokens_number == 0) {
             value->start = token;
         }
-
         tokens_number++;
         last_meaning_token = token;
         token = token->next;
@@ -302,6 +298,9 @@ element_status parse_declaration(struct token* first_token, struct element* decl
     }
 
     element_add_child(declaration, property);
+    declaration->start = property->start;
+
+    token = property->end->next;
 
     while (1) {
         if (!token) {
@@ -313,7 +312,7 @@ element_status parse_declaration(struct token* first_token, struct element* decl
         } else if (token->type == token_space || token->type == token_comment) {
             token = token->next;
         } else {
-            error->message = "unexpected token";
+            error->message = "unexpected token while parsing declaration";
             error->token = token;
             return element_error;
         }
@@ -328,11 +327,16 @@ element_status parse_declaration(struct token* first_token, struct element* decl
         return result;
     }
     element_add_child(declaration, value);
+    declaration->end = value->end;
     return element_found;
 }
 
 element_status parse_declaration_block(struct token* first_token, struct element* block, struct syntax_error* error) {
     struct token* token = first_token;
+
+    element_init(block, element_declaration_block);
+
+    skip_spaces_and_comments(&token);
 
     if (!token || token->type != token_block_start) {
         error->message = "declaration block must start with \"{\"";
@@ -341,14 +345,18 @@ element_status parse_declaration_block(struct token* first_token, struct element
     }
 
     block->start = token;
-    block->first_child = 0;
-    block->next = 0;
 
     token = token->next;
 
     skip_spaces_and_comments(&token);
 
-    while (token && token->type != token_block_end) {
+    while (true) {
+        if (!token) {
+            error->message = "missing \"}\" at the end of declaration block";
+            error->token = first_token;
+            return element_error;
+        }
+
         struct element* declaration = malloc(sizeof(struct element));
         element_status result = parse_declaration(token, declaration, error);
         if (result != element_found) {
@@ -357,44 +365,179 @@ element_status parse_declaration_block(struct token* first_token, struct element
             return result;
         }
         element_add_child(block, declaration);
-
         token = declaration->end->next;
+
+        skip_spaces_and_comments(&token);
+
+        if (!token) {
+            error->message = "missing \"}\" at the end of declaration block";
+            error->token = first_token;
+            return element_error;
+        }
+
         if (token->type == token_semicolon) {
             token = token->next;
+            skip_spaces_and_comments(&token);
         }
+
+        if (!token) {
+            error->message = "missing \"}\" at the end of declaration block";
+            error->token = first_token;
+            return element_error;
+        }
+
+        if (token->type == token_block_end) {
+            block->end = token;
+            return element_found;
+        }
+    }
+}
+
+element_status parse_selector(struct token* first_token, struct element* selector, struct syntax_error* error) {
+    struct token* token = first_token;
+
+    element_init(selector, element_selector);
+
+    skip_spaces_and_comments(&token);
+
+    selector->start = token;
+    struct token* bracket = 0;
+    size_t tokens_number = 0;
+    while (1) {
+        if (!token || token->type == token_block_start || token->type == token_comma) {
+            if (tokens_number == 0) {
+                error->message = "empty selector";
+                error->token = first_token;
+                return element_error;
+            } else if (bracket) {
+                error->message = "unmatched bracket";
+                error->token = bracket;
+                return element_error;
+            } else {
+                return element_found;
+            }
+        }
+
+        switch (token->type) {
+        case token_bracket_start:
+        case token_parentheses_start:
+            if (bracket) {
+                error->message = "nested paretheses";
+                error->token = token;
+                return element_error;
+            }
+            bracket = token;
+            break;
+        case token_bracket_end:
+        case token_parentheses_end:
+            if (!bracket) {
+                error->message = "unmatched bracket";
+                error->token = token;
+                return element_error;
+            }
+            if ((token->type == token_bracket_end && bracket->type != token_bracket_start) ||
+                (token->type == token_parentheses_end && bracket->type != token_parentheses_start)) {
+                error->message = "invalid closing bracket";
+                error->token = token;
+                return element_error;
+            }
+            bracket = 0;
+            break;
+        case token_hash:
+        case token_dot:
+        case token_colon:
+        case token_greater_than:
+        case token_identifier:
+        case token_string:
+            break;
+        case token_space:
+        case token_comment:
+            token = token->next;
+            continue;
+        default:
+            error->message = "unexpected token";
+            error->token = token;
+            return element_error;
+        }
+
+        selector->end = token;
+        token = token->next;
+        tokens_number++;
+    }
+}
+
+element_status parse_selector_list(struct token* first_token, struct element* selector_list, struct syntax_error* error) {
+    struct token* token = first_token;
+
+    element_init(selector_list, element_selector_list);
+
+    skip_spaces_and_comments(&token);
+
+    size_t selectors_number = 0;
+    selector_list->start = token;
+
+    while (token && token->type != token_block_start) {
+        if (selectors_number > 0) {
+            if (token->type != token_comma) {
+                error->message = "expected comma";
+                error->token = token;
+                return element_error;
+            }
+            token = token->next;
+        }
+
+        struct element* selector = malloc(sizeof(struct element));
+        element_status selector_result = parse_selector(token, selector, error);
+        if (selector_result != element_found) {
+            element_free(selector_list->first_child);
+            free(selector);
+            return selector_result;
+        }
+        element_add_child(selector_list, selector);
+        selectors_number++;
+        selector_list->end = selector->end;
+
+        token = selector->end->next;
         skip_spaces_and_comments(&token);
     }
 
-    if (!token) {
-        error->message = "missing \"}\" at the end of declaration block";
+    if (selectors_number == 0) {
+        error->message = "empty selector list";
         error->token = first_token;
         return element_error;
     }
 
-    block->end = token;
     return element_found;
 }
 
-enum element_type get_at_rule_type(char const* identifier) {
-    for (char const* const* at_rule = regular_at_rules; *at_rule; at_rule++) {
-        if (strcmp(*at_rule, identifier) == 0) {
-            return element_regular_at_rule;
-        }
-    }
-    for (char const* const* at_rule = nested_at_rules; *at_rule; at_rule++) {
-        if (strcmp(*at_rule, identifier) == 0) {
-            return element_nested_at_rule;
-        }
-    }
-    for (char const* const* at_rule = conditional_group_at_rules; *at_rule; at_rule++) {
-        if (strcmp(*at_rule, identifier) == 0) {
-            return element_conditional_group_at_rule;
-        }
-    }
-    return -1;
-}
+element_status parse_rule_set(struct token* first_token, struct element* rule_set, struct syntax_error* error) {
+    struct token* token = first_token;
 
-element_status get_rule_set(struct token** token, struct element* element, struct syntax_error* error) {
+    element_init(rule_set, element_rule_set);
+
+    skip_spaces_and_comments(&token);
+
+    struct element* selector_list = malloc(sizeof(struct element));
+    element_status selector_list_result = parse_selector_list(token, selector_list, error);
+    if (selector_list_result != element_found) {
+        free(selector_list);
+        return selector_list_result;
+    }
+    element_add_child(rule_set, selector_list);
+    rule_set->start = selector_list->start;
+
+    token = selector_list->end->next;
+    struct element* declaration_block = malloc(sizeof(struct element));
+    element_status declaration_block_result = parse_declaration_block(token, declaration_block, error);
+    if (declaration_block_result != element_found) {
+        free(selector_list);
+        free(declaration_block);
+        return declaration_block_result;
+    }
+    element_add_child(rule_set, declaration_block);
+    rule_set->end = declaration_block->end;
+    selector_list->next = declaration_block;
+
     return element_found;
 }
 
@@ -468,7 +611,9 @@ element_status parse_conditional_group_block(struct token* first_token, struct e
 element_status parse_at_rule(struct token* first_token, struct element* at_rule, struct syntax_error* error) {
     struct token* token = first_token;
 
-    if (token->type != token_at) {
+    skip_spaces_and_comments(&token);
+
+    if (!token || token->type != token_at) {
         error->message = "at rule must start with \"@\"";
         error->token = token;
         return element_error;
@@ -486,7 +631,30 @@ element_status parse_at_rule(struct token* first_token, struct element* at_rule,
         return element_error;
     }
 
-    int type = get_at_rule_type(token->pointer);
+    int type = -1;
+    for (size_t i = 0; i < sizeof(regular_at_rules) / sizeof(char const*); i++) {
+        if (strcmp(regular_at_rules[i], token->string) == 0) {
+            type = i;
+            break;
+        }
+    }
+    if (type == -1) {
+        for (size_t i = 0; i < sizeof(nested_at_rules) / sizeof(char const*); i++) {
+            if (strcmp(nested_at_rules[i], token->string) == 0) {
+                type = i;
+                break;
+            }
+        }
+    }
+    if (type == -1) {
+        for (size_t i = 0; i < sizeof(conditional_group_at_rules) / sizeof(char const*); i++) {
+            if (strcmp(conditional_group_at_rules[i], token->string) == 0) {
+                type = i;
+                break;
+            }
+        }
+    }
+
     if (type == -1) {
         error->message = "unknown at-rule identifier";
         error->token = token;
@@ -552,7 +720,7 @@ element_status parse_elements(struct token* first_token, struct element** first_
         case token_dot:
         case token_hash:
         case token_identifier:
-            get_rule_set(&token, element, error);
+            parse_rule_set(token, element, error);
             break;
         default:
             error->message = "unexpected token";
@@ -587,7 +755,7 @@ void print_vars(struct element* element) {
     if (element->type == element_declaration) {
         char const* property_source = element->first_child->start->pointer;
         if (strncmp(property_source, "--", 2) == 0) {
-            print_declaration(element);
+            declaration_print(element);
         }
         return;
     }
