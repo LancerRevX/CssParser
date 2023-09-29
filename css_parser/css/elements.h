@@ -8,9 +8,7 @@ typedef enum element_status {
 } element_status;
 
 enum element_type {
-    element_regular_at_rule,
-    element_nested_at_rule,
-    element_conditional_group_at_rule,
+    element_at_rule,
     element_at_rule_rule,
     element_rule_set,
     element_selector,
@@ -24,9 +22,7 @@ enum element_type {
 };
 
 static char const* const element_name[] = {
-    [element_regular_at_rule] = "Regular at rule",
-    [element_nested_at_rule] = "Nested at rule",
-    [element_conditional_group_at_rule] = "Conditional group at rule",
+    [element_at_rule] = "At rule",
     [element_at_rule_rule] = "Rule of at-rule",
     [element_rule_set] = "Rule set",
     [element_selector] = "Selector",
@@ -52,26 +48,56 @@ struct syntax_error {
     struct token* token;
 };
 
-const char* const regular_at_rules[] = {
-    "charset",
-    "import",
-    "namespace",
+struct at_rule_syntax {
+    char const* identifier;
+    bool rule_allowed;
+    bool rule_required;
+    bool block_allowed;
+    bool block_required;
+    bool block_nested;
 };
 
-const char* const nested_at_rules[] = {
-    "page",
-    "font-face",
-    "keyframes",
-    "counter-style",
-    "font-feature-values",
-    "property",
-    "layer",
-};
-
-const char* const conditional_group_at_rules[] = {
-    "media",
-    "supports",
-    "document",
+struct at_rule_syntax at_rule_syntaxes[] = {
+    {
+        .identifier = "charset",
+        .rule_required = true,
+        .block_allowed = false,
+    },
+    {
+        .identifier = "import",
+        .rule_required = true,
+        .block_allowed = false,
+    },
+    {
+        .identifier = "namespace",
+        .rule_required = true,
+        .block_allowed = false,
+    },
+    {
+        .identifier = "font-face",
+        .rule_allowed = false,
+        .rule_required = false,
+        .block_required = true,
+        .block_nested = false,
+    },
+    {
+        .identifier = "property",
+        .rule_required = true,
+        .block_required = true,
+        .block_nested = false,
+    },
+    {
+        .identifier = "keyframes",
+        .rule_required = true,
+        .block_required = true,
+        .block_nested = true,
+    },
+    {
+        .identifier = "media",
+        .rule_required = true,
+        .block_required = true,
+        .block_nested = true,
+    },
 };
 
 void element_free(struct element* element) {
@@ -174,6 +200,7 @@ void skip_spaces_and_comments(struct token** token_ptr) {
         case token_space:
         case token_comment:
             *token_ptr = (*token_ptr)->next;
+            break;
         default:
             return;
         }
@@ -239,6 +266,7 @@ element_status parse_value(struct token* first_token, struct element* value, str
         case token_string:
         case token_percent:
         case token_hash:
+        case token_exclamation:
             break;
         case token_parentheses_start:
             parentheses++;
@@ -455,9 +483,13 @@ element_status parse_selector(struct token* first_token, struct element* selecto
             token = token->next;
             continue;
         default:
-            error->message = "unexpected token";
-            error->token = token;
-            return element_error;
+            if (!bracket) {
+                error->message = "unexpected token while parsing selector";
+                error->token = token;
+                return element_error;
+            } else {
+                break;
+            }
         }
 
         selector->end = token;
@@ -604,8 +636,55 @@ element_status parse_at_rule_rule(struct token* first_token, struct element* rul
     return element_found;
 }
 
-element_status parse_conditional_group_block(struct token* first_token, struct element* element, struct syntax_error* error) {
-    return element_found;
+element_status parse_at_rule(struct token* first_token, struct element* at_rule, struct syntax_error* error);
+
+element_status parse_conditional_group_block(struct token* first_token, struct element* block, struct syntax_error* error) {
+    struct token* token = first_token;
+
+    element_init(block, element_declaration_block);
+
+    skip_spaces_and_comments(&token);
+
+    if (token->type != token_block_start) {
+        error->message = "block must start with \"{\"";
+        error->token = token;
+        return element_error;
+    }
+
+    block->start = token;
+
+    token = token->next;
+
+    while (1) {
+        skip_spaces_and_comments(&token);
+
+        if (!token) {
+            error->message = "block must end with \"}\"";
+            error->token = first_token;
+            return element_error;
+        }
+
+        if (token->type == token_block_end) {
+            block->end = token;
+            return element_found;
+        }
+
+        struct element* new_chlid = malloc(sizeof(struct element));
+        element_status new_child_result;
+        if (token->type == token_at) {
+            new_child_result = parse_at_rule(token, new_chlid, error);
+        } else {
+            new_child_result = parse_rule_set(token, new_chlid, error);
+        }
+        if (new_child_result != element_found) {
+            element_free(block->first_child);
+            free(new_chlid);
+            return new_child_result;
+        }
+        element_add_child(block, new_chlid);
+        block->end = new_chlid->end;
+        token = block->end->next;
+    }
 }
 
 element_status parse_at_rule(struct token* first_token, struct element* at_rule, struct syntax_error* error) {
@@ -619,9 +698,8 @@ element_status parse_at_rule(struct token* first_token, struct element* at_rule,
         return element_error;
     }
 
+    element_init(at_rule, element_at_rule);
     at_rule->start = token;
-    at_rule->first_child = 0;
-    at_rule->next = 0;
 
     token = token->next;
 
@@ -631,75 +709,69 @@ element_status parse_at_rule(struct token* first_token, struct element* at_rule,
         return element_error;
     }
 
-    int type = -1;
-    for (size_t i = 0; i < sizeof(regular_at_rules) / sizeof(char const*); i++) {
-        if (strcmp(regular_at_rules[i], token->string) == 0) {
-            type = i;
+    struct at_rule_syntax* syntax = 0;
+    for (size_t i = 0; i < sizeof(at_rule_syntaxes) / sizeof(struct at_rule_syntax); i++) {
+        if (strcmp(at_rule_syntaxes[i].identifier, token->string) == 0) {
+            syntax = &at_rule_syntaxes[i];
             break;
         }
     }
-    if (type == -1) {
-        for (size_t i = 0; i < sizeof(nested_at_rules) / sizeof(char const*); i++) {
-            if (strcmp(nested_at_rules[i], token->string) == 0) {
-                type = i;
-                break;
-            }
-        }
-    }
-    if (type == -1) {
-        for (size_t i = 0; i < sizeof(conditional_group_at_rules) / sizeof(char const*); i++) {
-            if (strcmp(conditional_group_at_rules[i], token->string) == 0) {
-                type = i;
-                break;
-            }
-        }
-    }
-
-    if (type == -1) {
+    if (!syntax) {
         error->message = "unknown at-rule identifier";
         error->token = token;
         return element_error;
     }
-    at_rule->type = type;
 
     token = token->next;
 
-    struct element* rule = malloc(sizeof(struct element));
-    enum element_status result;
-    result = parse_at_rule_rule(token, rule, error);
-    if (result != element_found) {
-        free(rule);
-        return result;
-    }
-    element_add_child(at_rule, rule);
+    skip_spaces_and_comments(&token);
 
-    if (type == element_regular_at_rule) {
+    if (syntax->rule_required || (syntax->rule_allowed && token->type != token_block_start)) {
+        struct element* rule = malloc(sizeof(struct element));
+        enum element_status result = parse_at_rule_rule(token, rule, error);
+        if (result != element_found) {
+            free(rule);
+            return result;
+        }
+        element_add_child(at_rule, rule);
+
         at_rule->end = rule->end;
-        return element_found;
+        token = rule->end->next;
     }
 
-    token = rule->end->next;
-    struct element* block = malloc(sizeof(struct element));
-    if (type == element_nested_at_rule) {
-        result = parse_declaration_block(token, block, error);
-    } else {
-        result = parse_conditional_group_block(token, block, error);
+    skip_spaces_and_comments(&token);
+
+    if (syntax->block_required || (syntax->block_allowed && token->type == token_block_start)) {
+        enum element_status block_result;
+        struct element* block = malloc(sizeof(struct element));
+        if (syntax->block_nested) {
+            block_result = parse_conditional_group_block(token, block, error);
+        } else {
+            block_result = parse_declaration_block(token, block, error);
+        }
+
+        if (block_result != element_found) {
+            element_free(at_rule->first_child);
+            free(block);
+            return block_result;
+        }
+
+        element_add_child(at_rule, block);
+        at_rule->end = block->end;
     }
 
-    if (result != element_found) {
-        return result;
-    }
-
-    element_add_child(at_rule, block);
     return element_found;
 }
 
-element_status parse_elements(struct token* first_token, struct element** first_element, size_t* elements_number, struct syntax_error* error) {
+element_status parse_elements(struct token* first_token, struct element** first_element, struct syntax_error* error) {
     struct element* element = 0;
-    *elements_number = 0;
 
     struct token* token = first_token;
+
+    skip_spaces_and_comments(&token);
+
     while (token) {
+
         if (element == 0) {
             element = malloc(sizeof(struct element));
             *first_element = element;
@@ -708,19 +780,19 @@ element_status parse_elements(struct token* first_token, struct element** first_
             element = element->next;
         }
         element->next = 0;
+        element->first_child = 0;
+
+        element_status result;
 
         switch (token->type) {
-        case token_space:
-        case token_comment:
-            token = token->next;
-            continue;
         case token_at:
-            parse_at_rule(token, element, error);
+            result = parse_at_rule(token, element, error);
             break;
         case token_dot:
         case token_hash:
         case token_identifier:
-            parse_rule_set(token, element, error);
+        case token_colon:
+            result = parse_rule_set(token, element, error);
             break;
         default:
             error->message = "unexpected token";
@@ -728,6 +800,14 @@ element_status parse_elements(struct token* first_token, struct element** first_
             element_free(*first_element);
             return element_error;
         }
+
+        if (result != element_found) {
+            return result;
+        }
+
+        token = element->end->next;
+
+        skip_spaces_and_comments(&token);
     }
 
     return element_found;

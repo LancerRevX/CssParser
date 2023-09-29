@@ -219,6 +219,10 @@ token_status parse_tokens(struct token** first_token, size_t* tokens_number, cha
         case token_found:
             i += token->length;
             (*tokens_number)++;
+
+            if (i % (source_len / 100) == 0) {
+            printf("%zu%%", i / (source_len / 100));
+            }
             continue;
         case token_not_found:
             free_tokens(*first_token);

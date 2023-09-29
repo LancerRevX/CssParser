@@ -27,6 +27,8 @@ enum token_type {
     token_slash,
     token_plus,
     token_minus,
+    token_equal,
+    token_asterisk,
 
     token_space,
     token_comment,
@@ -54,6 +56,8 @@ static char const single_char_tokens[] = {
     [token_slash] = '/',
     [token_plus] = '+',
     [token_minus] = '-',
+    [token_equal] = '=',
+    [token_asterisk] = '*',
     0,
 };
 
@@ -76,6 +80,8 @@ static char const* const token_names[] = {
     [token_slash] = "'/'",
     [token_plus] = "'+'",
     [token_minus] = "'-'",
+    [token_equal] = "'='",
+    [token_asterisk] = "'*'",
 
     [token_space] = "Space",
     [token_comment] = "Comment",

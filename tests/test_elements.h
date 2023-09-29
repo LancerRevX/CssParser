@@ -429,8 +429,6 @@ static struct regular_at_rule_test regular_at_rule_tests[] = {
     },
 };
 
-
-
 START_TEST(test_regular_at_rule) {
     struct token* first_token = 0;
     size_t tokens_number = 0;
@@ -444,7 +442,7 @@ START_TEST(test_regular_at_rule) {
 
     if (regular_at_rule_tests[_i].valid) {
         ck_assert_msg(regular_at_rule_result == element_found, "parse error: %s; token: %s", syntax_error.message, syntax_error.token->string);
-        ck_assert_int_eq(regular_at_rule.type, element_regular_at_rule);
+        ck_assert_int_eq(regular_at_rule.type, element_at_rule);
         ck_assert_int_eq(regular_at_rule.start->type, token_at);
         ck_assert_int_eq(element_count_children(&regular_at_rule), 1);
         ck_assert_int_eq(element_length(&regular_at_rule), regular_at_rule_tests[_i].length);
@@ -460,7 +458,354 @@ START_TEST(test_regular_at_rule) {
 }
 END_TEST
 
-Suite* get_elements_test_suite(void) {
+struct nested_at_rule_test {
+    char const* source;
+    bool valid;
+    char const* rule_string;
+    size_t declarations_number;
+};
+
+static struct nested_at_rule_test nested_at_rule_tests[] = {
+    {
+        .source = "@font-face {"
+                  "font-family: 'oskar-md-icons';"
+                  "src: url('../fonts/icons.ttf');"
+                  "}",
+        .valid = true,
+        .rule_string = 0,
+        .declarations_number = 2,
+    },
+    {
+        .source = "@property --property-name {"
+                  "syntax: \"<color>\";"
+                  "inherits: false;"
+                  "initial-value: #c0ffee;"
+                  "}",
+        .valid = true,
+        .rule_string = "--property-name",
+        .declarations_number = 3,
+    },
+};
+
+START_TEST(test_nested_at_rule) {
+    struct token* first_token = 0;
+    size_t tokens_number = 0;
+    struct lexical_error lexical_error;
+    enum token_status token_result = parse_tokens(&first_token, &tokens_number, nested_at_rule_tests[_i].source, &lexical_error);
+    ck_assert_int_eq(token_result, token_found);
+
+    struct element nested_at_rule;
+    struct syntax_error syntax_error;
+    enum element_status nested_at_rule_result = parse_at_rule(first_token, &nested_at_rule, &syntax_error);
+
+    if (nested_at_rule_tests[_i].valid) {
+        ck_assert_msg(nested_at_rule_result == element_found, "parse error: %s; token: %s", syntax_error.message, syntax_error.token->string);
+        ck_assert_int_eq(nested_at_rule.type, element_at_rule);
+        ck_assert_int_eq(nested_at_rule.start->type, token_at);
+        ck_assert_int_eq(nested_at_rule.end->type, token_block_end);
+
+        struct element* declaration_block;
+        if (nested_at_rule_tests[_i].rule_string) {
+            ck_assert_int_eq(element_count_children(&nested_at_rule), 2);
+            struct element* at_rule_rule = nested_at_rule.first_child;
+            ck_assert_int_eq(at_rule_rule->type, element_at_rule_rule);
+            ck_assert_int_eq(element_length(at_rule_rule), strlen(nested_at_rule_tests[_i].rule_string));
+
+            declaration_block = at_rule_rule->next;
+        } else {
+            declaration_block = nested_at_rule.first_child;
+        }
+
+        ck_assert_int_eq(declaration_block->start->type, token_block_start);
+        ck_assert_int_eq(declaration_block->end->type, token_block_end);
+        ck_assert_int_eq(element_count_children(declaration_block), nested_at_rule_tests[_i].declarations_number);
+    } else {
+        ck_assert_int_eq(nested_at_rule_result, element_error);
+    }
+}
+END_TEST
+
+struct media_at_rule_test {
+    char const* source;
+    bool valid;
+    char const* rule_string;
+    size_t nested_blocks_number;
+};
+
+static struct media_at_rule_test media_at_rule_tests[] = {
+    {
+        .source = "@media not all and (hover: hover) {"
+                  "  abbr::after {"
+                  "    content: ' (' attr(title) ')';"
+                  "  }"
+                  "}",
+        .valid = true,
+        .rule_string = "not all and (hover: hover)",
+        .nested_blocks_number = 1,
+    },
+    {
+        .source = "@media only screen and (min-width: 320px) and (max-width: 480px) and (resolution: 150dpi) {"
+                  "  body {"
+                  "    line-height: 1.4;"
+                  "  }"
+                  "}",
+        .valid = true,
+        .rule_string = "only screen and (min-width: 320px) and (max-width: 480px) and (resolution: 150dpi)",
+        .nested_blocks_number = 1,
+    },
+};
+
+START_TEST(test_media_at_rule) {
+    struct token* first_token = 0;
+    size_t tokens_number = 0;
+    struct lexical_error lexical_error;
+    enum token_status token_result = parse_tokens(&first_token, &tokens_number, media_at_rule_tests[_i].source, &lexical_error);
+    ck_assert_int_eq(token_result, token_found);
+
+    struct element media_at_rule;
+    struct syntax_error syntax_error;
+    enum element_status media_at_rule_result = parse_at_rule(first_token, &media_at_rule, &syntax_error);
+
+    if (media_at_rule_tests[_i].valid) {
+        ck_assert_msg(media_at_rule_result == element_found, "parse error: %s; token: %s", syntax_error.message, syntax_error.token->string);
+        ck_assert_int_eq(media_at_rule.type, element_at_rule);
+        ck_assert_int_eq(media_at_rule.start->type, token_at);
+        ck_assert_int_eq(media_at_rule.end->type, token_block_end);
+
+        ck_assert_int_eq(element_count_children(&media_at_rule), 2);
+        struct element* at_rule_rule = media_at_rule.first_child;
+        ck_assert_int_eq(at_rule_rule->type, element_at_rule_rule);
+        ck_assert_int_eq(element_length(at_rule_rule), strlen(media_at_rule_tests[_i].rule_string));
+
+        struct element* declaration_block = at_rule_rule->next;
+        ck_assert_int_eq(declaration_block->start->type, token_block_start);
+        ck_assert_int_eq(declaration_block->end->type, token_block_end);
+        ck_assert_int_eq(element_count_children(declaration_block), media_at_rule_tests[_i].nested_blocks_number);
+    } else {
+        ck_assert_int_eq(media_at_rule_result, element_error);
+    }
+}
+END_TEST
+
+START_TEST(test_real_css){
+    char const* source = "/*"
+                         " Theme Name:   Woodmart Child"
+                         " Description:  Woodmart Child Theme"
+                         " Author:       XTemos"
+                         " Author URI:   http://xtemos.com"
+                         " Template:     woodmart"
+                         " Version:      1.0.0"
+                         " Text Domain:  woodmart"
+                         "*/"
+                         ""
+                         "@font-face {"
+                         "    font-family: 'oskar-md-icons';"
+                         "    src: url('../fonts/icons.ttf');"
+                         "}"
+                         ""
+                         ".i-mattress {"
+                         ""
+                         "    font-family: 'oskar-md-icons';"
+                         "    font-style: normal;"
+                         "    font-weight: 400;"
+                         "    font-variant: normal;"
+                         ""
+                         "}"
+                         ""
+                         ".i-mattress::before {"
+                         "    font-family: 'oskar-md-icons';"
+                         "    content: \"\\e958\";"
+                         "}"
+                         ""
+                         "/* подпись размера для одеял и подушек */"
+                         ".my-size-annotation {"
+                         "    color: var(--wd-text-color);"
+                         "    font-size: 95%;"
+                         "    font-weight: 400;"
+                         "}"
+                         ""
+                         "/* убрать артикул на странице товара */"
+                         "span.sku_wrapper {"
+                         "	display: none;"
+                         "}"
+                         ""
+                         ""
+                         ".wd-pf-btn {"
+                         "	width: 100% !important;"
+                         "}"
+                         ""
+                         ".wd-pf-btn button {"
+                         "	width: 100%;"
+                         "}"
+                         ""
+                         ":root {"
+                         "    --my-color-vk: #0077ff;"
+                         "    --my-color-white: #ffffff;"
+                         "    --my-color-black: #2b2a29;"
+                         "    --my-color-light-gray: rgb(245, 245, 245);"
+                         "    --my-color-gray-background: rgb(248, 248, 248);"
+                         "    --my-color-gray-border: rgb(216, 216, 216);"
+                         "    --my-color-red: #e31e24;"
+                         "    --my-color-green: #9eff00;"
+                         "    --my-color-green-dark: rgb(21, 156, 0);"
+                         "    --my-color-gray: rgb(102, 102, 102);"
+                         "    --my-color-dark-gray: rgb(84, 84, 84);"
+                         "    --my-color-vk: #0077FF;"
+                         "    --my-color-whatsapp: #25D366;"
+                         "    --my-color-viber: #7360f2;"
+                         "    --my-color-telegram: #2AABEE;"
+                         ""
+                         "    --my-main-width: 1222px;"
+                         "    --my-main-padding: 15px;"
+                         ""
+                         "    --my-text-font-size: 14px;"
+                         "    --my-title-font-size: 20px;"
+                         "}"
+                         ""
+                         ".my-main {"
+                         "    max-width: var(--my-main-width);"
+                         "    margin: 0 auto;"
+                         "    padding: 0 var(--my-main-padding);"
+                         "}"
+                         ""
+                         ".my-button {"
+                         "    display: flex;"
+                         "    flex-direction: row;"
+                         "    justify-content: center;"
+                         "    align-items: center;"
+                         "    gap: 0.4em;"
+                         "    max-width: 100%;"
+                         "    padding: 14px 20px;"
+                         "    box-sizing: border-box;"
+                         "    text-transform: uppercase;"
+                         "    background-color: #f3f3f3;"
+                         "    color: #3e3e3e; "
+                         "    font-size: 13px;"
+                         "    font-weight: 600;"
+                         "    line-height: 18px;"
+                         "    text-align: center;"
+                         "}"
+                         ""
+                         ".my-button:hover {"
+                         "    box-shadow: inset 0 0 200px rgba(0,0,0,0.1);"
+                         "    color: #3e3e3e;"
+                         "}"
+                         ""
+                         ".my-button.red {"
+                         "    background-color: var(--my-color-red);"
+                         "    color: var(--my-color-white);"
+                         "}"
+                         ""
+                         ".my-button.vk {"
+                         "    background-color: var(--my-color-vk);"
+                         "    color: var(--my-color-white);"
+                         "}"
+                         ""
+                         ".my-button-icon {"
+                         "    font-size: 18px;"
+                         "}"
+                         ""
+                         ""
+                         ".checkout .optional {"
+                         "    display: none;"
+                         "}"
+                         ""
+                         "#billing_country_field {"
+                         "    display: none;"
+                         "}"
+                         ""
+                         "/* Кнопка \"В корзину\" на странице товара */"
+                         ""
+                         "form.cart {"
+                         "    display: flex;"
+                         "    flex-direction: row;"
+                         "}"
+                         ""
+                         ".single_add_to_cart_button {"
+                         "    flex: 1;"
+                         "}"
+                         ""
+                         "form.variations_form.cart {"
+                         "    flex-direction: column;"
+                         "}"
+                         ""
+                         "form.variations_form.cart select {"
+                         "    width: 100%;"
+                         "    max-width: 100%;"
+                         "}"
+                         ""
+                         ".woocommerce-variation-add-to-cart  {"
+                         "    display: flex;"
+                         "    flex-direction: row;"
+                         "}"
+                         ""
+                         ""
+                         ""
+                         ""
+                         ""
+                         ".category-image :nth-child(2) {"
+                         "    display: none;"
+                         "} /* фикс бага с изображением категории */"
+                         ""
+                         ".entry-meta-list {"
+                         "	display: none;"
+                         "} /* имя автора статьи */"
+                         ""
+                         ".dd-selected-image, .dd-option-image {"
+                         "	display: none;"
+                         "} /* картинка для опции \"нет\" составного товара */"
+                         ""
+                         ".cart_item .woocommerce-placeholder {"
+                         "	display: none;"
+                         "} "
+                         ".wooco-cart-item .woocommerce-placeholder {"
+                         "	opacity: 0;"
+                         "}/* картинка компонента в корзине */"
+                         ""
+                         "/* порядок кнопок социальных сетей */"
+                         ".wd-social-icons {"
+                         "	display: flex;"
+                         "	justify-content: center;"
+                         "}"
+                         ".social-vk {"
+                         "	order: 1;"
+                         "	margin-left: 0;"
+                         "}"
+                         ".social-ok {"
+                         "	order: 2;"
+                         "}"
+                         ".social-tg {"
+                         "	order: 3;"
+                         "}"
+                         ".social-youtube {"
+                         "	order: 4;"
+                         "}"
+                         ""
+                         "/*убрать дату с статей*/"
+                         ".post-date {"
+                         "	display: none !important;"
+                         "}"
+                         ""
+                         "/*удаление огромного отступа у заголовка страницы*/"
+                         "/*.page-title {"
+                         "	margin-bottom: 0;"
+                         "}"
+                         "*/";
+    struct token* first_token = 0;
+    size_t tokens_number = 0;
+    struct lexical_error lexical_error;
+    enum token_status token_result = parse_tokens(&first_token, &tokens_number, source, &lexical_error);
+    ck_assert_int_eq(token_result, token_found);
+
+    struct element* first_element;
+    struct syntax_error syntax_error;
+    enum element_status result = parse_elements(first_token, &first_element, &syntax_error);
+
+    ck_assert_int_eq(result, element_found);
+
+} END_TEST
+
+    Suite* get_elements_test_suite(void) {
     Suite* suite = suite_create("Elements");
 
     TCase* common = tcase_create("Common");
@@ -476,11 +821,17 @@ Suite* get_elements_test_suite(void) {
     TCase* at_rules = tcase_create("At rules");
     tcase_add_test(at_rules, test_at_rule_rule);
     tcase_add_loop_test(at_rules, test_regular_at_rule, 0, sizeof(regular_at_rule_tests) / sizeof(struct regular_at_rule_test));
+    tcase_add_loop_test(at_rules, test_nested_at_rule, 0, sizeof(nested_at_rule_tests) / sizeof(struct nested_at_rule_test));
+    tcase_add_loop_test(at_rules, test_media_at_rule, 0, sizeof(media_at_rule_tests) / sizeof(struct media_at_rule_test));
+
+    TCase* final = tcase_create("Final");
+    tcase_add_test(final, test_real_css);
 
     // suite_add_tcase(suite, rule_sets);
     suite_add_tcase(suite, common);
     suite_add_tcase(suite, rule_sets);
     suite_add_tcase(suite, at_rules);
+    suite_add_tcase(suite, final);
 
     return suite;
 }
