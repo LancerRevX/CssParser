@@ -128,4 +128,4 @@ get_token_function get_identifier_token;
 
 token_status get_token(struct token* token, char const* source, size_t pos, struct lexical_error* error);
 
-token_status parse_tokens(struct token** first_token, size_t* tokens_number, char const* source, struct lexical_error* error);
+token_status parse_tokens(struct token* tokens, size_t* tokens_number, char const* source, struct lexical_error* error);

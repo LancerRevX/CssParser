@@ -93,16 +93,15 @@ struct value_test value_tests[] = {
 };
 
 START_TEST(test_valid_value) {
-
-    struct token* first_token = 0;
-    size_t tokens_number = 0;
-    struct lexical_error lexical_error;
-    enum token_status result = parse_tokens(&first_token, &tokens_number, value_tests[_i].source, &lexical_error);
+    struct token* tokens = calloc(strlen(value_tests[_i].source), sizeof(char));
+    size_t tokens_number;
+    struct lexical_error error;
+    enum token_status result = parse_tokens(tokens, &tokens_number, value_tests[_i].source, &error);
     ck_assert_int_eq(result, token_found);
 
     struct element value;
     struct syntax_error syntax_error;
-    enum element_status value_result = parse_value(first_token, &value, &syntax_error);
+    enum element_status value_result = parse_value(tokens, &value, &syntax_error);
 
     ck_assert_int_eq(value_result, element_found);
     ck_assert_int_eq(value.type, element_value);

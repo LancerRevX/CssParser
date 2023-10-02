@@ -136,15 +136,15 @@ int parse_command_line(int argc, char* argv[], struct options* options) {
 
 int main(int argc, char* argv[]) {
     struct options options = {0, 0, 0, 0, -1};
-    // #ifdef DEBUG
-    // options.file_path = "d:/projects/atribut-local/wp-content/themes/woodmart-child/style.css";
-    // options.print_elements = true;
-    // #else
+    #ifdef DEBUG
+    options.file_path = "d:/projects/atribut-local/wp-content/themes/woodmart/style.min.css";
+    options.print_elements = true;
+    #else
     parse_command_line(argc, argv, &options);
-    // #endif
+    #endif
 
     FILE* file;
-    struct token* first_token;
+    struct token* tokens;
     struct element* first_element = 0;
     size_t tokens_number;
     char* source;
@@ -164,9 +164,16 @@ int main(int argc, char* argv[]) {
 
         printf("Parsing file \"%s\"...\n", options.file_path);
 
+        tokens = calloc(file_size, sizeof(struct token));
+        if (!tokens) {
+            puts("Couldn't allocate memory");
+        }
+
+        printf("Allocated %zu KiB\n", file_size * sizeof(struct token) / 1024);
+
         struct lexical_error error;
         enum token_status parse_result =
-            parse_tokens(&first_token, &tokens_number, source, &error);
+            parse_tokens(tokens, &tokens_number, source, &error);
 
         if (parse_result & (token_error | token_not_found)) {
             printf("Lexical error while parsing file \"%s\":", options.file_path);
@@ -176,16 +183,16 @@ int main(int argc, char* argv[]) {
             puts("Lexical analysis successful...");
         }
 
-        struct syntax_error syntax_error;
-        enum element_status syntax_result = parse_elements(first_token, &first_element, &syntax_error);
+        // struct syntax_error syntax_error;
+        // enum element_status syntax_result = parse_elements(first_token, &first_element, &syntax_error);
 
-        if (syntax_result != element_found) {
-            printf("Syntax error while parsing file \"%s\":", options.file_path);
-            print_error(source, syntax_error.token->pointer - source, syntax_error.token->length, syntax_error.message);
-            return 1;
-        } else {
-            puts("Syntax analysis successful...");
-        }
+        // if (syntax_result != element_found) {
+        //     printf("Syntax error while parsing file \"%s\":", options.file_path);
+        //     print_error(source, syntax_error.token->pointer - source, syntax_error.token->length, syntax_error.message);
+        //     return 1;
+        // } else {
+        //     puts("Syntax analysis successful...");
+        // }
     } else {
         print_help();
         return 1;
@@ -193,7 +200,9 @@ int main(int argc, char* argv[]) {
 
     if (options.print_tokens) {
         printf("Found %zu tokens\n", tokens_number);
-        for (struct token* token = first_token; token != 0; token = token->next) {
+        for (size_t i = 0; i < tokens_number; i++) {
+            struct token* token = &tokens[i];
+
             if (options.filter_tokens && token->type != (enum token_type) options.filter_tokens) {
                 continue;
             }

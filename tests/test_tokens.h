@@ -106,14 +106,14 @@ static const struct {
      .string = 0}};
 
 START_TEST(test_quoted_string) {
-    struct token* first_token;
+    struct token* tokens = calloc(strlen(string_tests[_i].source), sizeof(char));
     size_t tokens_number;
     struct lexical_error error;
-    enum token_status result = parse_tokens(&first_token, &tokens_number, string_tests[_i].source, &error);
+    enum token_status result = parse_tokens(tokens, &tokens_number, string_tests[_i].source, &error);
 
     if (string_tests[_i].valid) {
         ck_assert_int_eq(result, token_found);
-        struct token* token = token_get(first_token, string_tests[_i].index);
+        struct token* token = &tokens[string_tests[_i].index];
         ck_assert_int_eq(token->type, token_string);
         ck_assert_str_eq(token->string, string_tests[_i].string);
     } else {
@@ -128,10 +128,10 @@ START_TEST(parse_tokens_case1) {
                          "property:value;"                    // 4
                          "another_property:\"quoted-value\";" // 6 (2 quotes)
                          "}";                                 // 1
-    struct token* first_token;
+    struct token* tokens = calloc(strlen(source), sizeof(char));
     size_t tokens_number;
     struct lexical_error error;
-    enum token_status result = parse_tokens(&first_token, &tokens_number, source, &error);
+    enum token_status result = parse_tokens(tokens, &tokens_number, source, &error);
 
     ck_assert_int_eq(result, token_found);
     ck_assert_int_eq(tokens_number, 16);
@@ -143,10 +143,10 @@ START_TEST(parse_tokens_invalid_token) {
                          "selector,another_selector${" // $ <--
                          "property:value;"
                          "}";
-    struct token* first_token;
+    struct token* tokens = calloc(strlen(source), sizeof(char));
     size_t tokens_number;
     struct lexical_error error;
-    enum token_status result = parse_tokens(&first_token, &tokens_number, source, &error);
+    enum token_status result = parse_tokens(tokens, &tokens_number, source, &error);
 
     ck_assert_int_eq(result, token_error);
     ck_assert_int_eq(error.pos, strstr(source, "$") - source);

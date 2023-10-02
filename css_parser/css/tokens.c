@@ -13,7 +13,8 @@ void free_tokens(struct token* token) {
 
 void token_set_string(struct token* token, char const* source, size_t length) {
     char* string = calloc(length + 1, sizeof(char));
-    snprintf(string, length + 1, "%s", source);
+    strncpy(string, source, length);
+    string[length] = 0;
     token->string = string;
 }
 
@@ -27,7 +28,7 @@ struct token* token_get(struct token* first_token, size_t i) {
 
 typedef token_status(get_token_function)(struct token*, char const*, size_t, struct lexical_error*);
 
-token_status get_space_token(struct token* token, char const* source, size_t pos, struct lexical_error* error) {
+token_status get_space_token_old(struct token* token, char const* source, size_t pos, struct lexical_error* error) {
     (void)error;
 
     static regex_t space_regex;
@@ -50,6 +51,33 @@ token_status get_space_token(struct token* token, char const* source, size_t pos
     } else {
         return token_not_found;
     }
+}
+
+token_status get_space_token(struct token* token, char const* source, size_t pos, struct lexical_error* error) {
+    (void)error;
+
+    size_t space_length = 0;
+    size_t i = pos;
+    char current_char;
+    while ((current_char = source[i]) != 0) {
+        if (current_char == ' ' || current_char == '\n' || current_char == '\t') {
+            space_length++;
+            i++;
+            continue;
+        } else {
+            break;
+        }
+    }
+
+    if (space_length == 0) {
+        return token_not_found;
+    }
+
+    token->type = token_space;
+    token->pointer = &source[pos];
+    token->length = space_length;
+    token_set_string(token, token->pointer, token->length);
+    return token_found;
 }
 
 token_status get_single_char_token(struct token* token, char const* source, size_t pos, struct lexical_error* error) {
@@ -113,7 +141,7 @@ token_status get_string_token(struct token* token, char const* source, size_t po
     return token_found;
 }
 
-token_status get_number_token(struct token* token, char const* source, size_t pos, struct lexical_error* error) {
+token_status get_number_token_old(struct token* token, char const* source, size_t pos, struct lexical_error* error) {
     (void)error;
 
     static regex_t number_regex;
@@ -139,12 +167,56 @@ token_status get_number_token(struct token* token, char const* source, size_t po
     return token_found;
 }
 
+token_status get_number_token(struct token* token, char const* source, size_t pos, struct lexical_error* error) {
+    size_t i = pos;
+    size_t number_length = 0;
+    size_t after_dot_length = 0;
+    bool dot = false;
+    char current_char;
+    while ((current_char = source[i]) != 0) {
+        if (isdigit(current_char)) {
+            if (dot) {
+                after_dot_length++;
+            }
+            number_length++;
+            i++;
+            continue;
+        }
+
+        if (!dot && number_length > 0 && current_char == '.') {
+            dot = true;
+            number_length++;
+            i++;
+            continue;
+        }
+
+        break;
+    }
+
+    if (number_length == 0) {
+        return token_not_found;
+    }
+
+    if (dot && after_dot_length == 0) {
+        error->message = "expected a number after \".\"";
+        error->pos = i + number_length - 1;
+        error->source = source;
+        error->length = 1;
+        return token_error;
+    }
+
+    token->type = token_number;
+    token->pointer = &source[pos];
+    token->length = number_length;
+    token_set_string(token, token->pointer, token->length);
+    return token_found;
+}
+
 token_status get_identifier_token(struct token* token, char const* source, size_t pos, struct lexical_error* error) {
     (void)error;
 
-    size_t source_length = strlen(source);
     size_t i;
-    for (i = pos; i < source_length; i++) {
+    for (i = pos; source[i] != 0; i++) {
         if (i == pos && isdigit(source[i])) {
             return token_not_found;
         }
@@ -199,45 +271,38 @@ token_status get_token(struct token* token, char const* source, size_t pos, stru
     return token_not_found;
 }
 
-token_status parse_tokens(struct token** first_token, size_t* tokens_number, char const* source, struct lexical_error* error) {
+token_status parse_tokens(struct token* tokens, size_t* tokens_number, char const* source, struct lexical_error* error) {
+    static size_t log_treshold = 1000;
+
     size_t source_len = strlen(source);
 
-    size_t i = 0;
-    struct token* token = 0;
-    *tokens_number = 0;
-    while (i < source_len) {
-        if (!token) {
-            token = malloc(sizeof(struct token));
-            *first_token = token;
-        } else {
-            token->next = malloc(sizeof(struct token));
-            token = token->next;
-        }
-        token->next = 0;
+    size_t source_i = 0;
+    size_t token_i = 0;
+    size_t log_i = log_treshold;
+    while (source_i < source_len) {
+        struct token* token = &tokens[token_i];
 
-        switch (get_token(token, source, i, error)) {
+        switch (get_token(token, source, source_i, error)) {
         case token_found:
-            i += token->length;
-            (*tokens_number)++;
-
-            if (i % (source_len / 100) == 0) {
-            printf("%zu%%", i / (source_len / 100));
+            source_i += token->length;
+            token_i++;
+            if (token_i > log_i) {
+                printf("%zu%%, %zu tokens, %zu chars\n", source_i / (source_len / 100), token_i + 1, source_i + 1);
+                log_i += log_treshold;
             }
             continue;
         case token_not_found:
-            free_tokens(*first_token);
-
             error->message = "unexpected character";
             error->source = source;
-            error->pos = i;
+            error->pos = source_i;
             error->length = 1;
 
             return token_error;
         case token_error:
-            free_tokens(*first_token);
             return token_error;
         }
     }
+    *tokens_number = token_i;
 
     return token_found;
 }
