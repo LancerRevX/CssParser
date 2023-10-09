@@ -29,6 +29,9 @@ enum token_type {
     token_minus,
     token_equal,
     token_asterisk,
+    token_tilda,
+    token_caret,
+    token_dollar,
 
     token_space,
     token_comment,
@@ -58,13 +61,16 @@ static char const single_char_tokens[] = {
     [token_minus] = '-',
     [token_equal] = '=',
     [token_asterisk] = '*',
+    [token_tilda] = '~',
+    [token_caret] = '^',
+    [token_dollar] = '$',
     0,
 };
 
 static char const* const token_names[] = {
     [token_block_start] = "Block start",
     [token_block_end] = "Block end",
-    [token_bracket_start] = "[",
+    [token_bracket_start] = "Bracket start ('[')",
     [token_bracket_end] = "]",
     [token_parentheses_start] = "(",
     [token_parentheses_end] = ")",
@@ -81,7 +87,10 @@ static char const* const token_names[] = {
     [token_plus] = "'+'",
     [token_minus] = "'-'",
     [token_equal] = "'='",
-    [token_asterisk] = "'*'",
+    [token_asterisk] = "Asterisk('*')",
+    [token_tilda] = "'~'",
+    [token_caret] = "'^'",
+    [token_dollar] = "'$'",
 
     [token_space] = "Space",
     [token_comment] = "Comment",

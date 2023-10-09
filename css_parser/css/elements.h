@@ -267,6 +267,7 @@ element_status parse_value(struct token* first_token, struct element* value, str
         case token_percent:
         case token_hash:
         case token_exclamation:
+        case token_slash:
             break;
         case token_parentheses_start:
             parentheses++;
@@ -429,17 +430,27 @@ element_status parse_selector(struct token* first_token, struct element* selecto
     skip_spaces_and_comments(&token);
 
     selector->start = token;
-    struct token* bracket = 0;
+    struct token** brackets = calloc(100, sizeof(struct token*));
+    size_t brackets_number = 0;
     size_t tokens_number = 0;
     while (1) {
-        if (!token || token->type == token_block_start || token->type == token_comma) {
+        if (!token) {
+            if (brackets_number > 0) {
+                error->message = "unmatched bracket";
+                error->token = brackets[brackets_number - 1];
+                return element_error;
+            }
+            return element_found;
+        }
+
+        if (brackets_number == 0 && (token->type == token_block_start || token->type == token_comma)) {
             if (tokens_number == 0) {
                 error->message = "empty selector";
                 error->token = first_token;
                 return element_error;
-            } else if (bracket) {
+            } else if (brackets_number > 0) {
                 error->message = "unmatched bracket";
-                error->token = bracket;
+                error->token = brackets[brackets_number - 1];
                 return element_error;
             } else {
                 return element_found;
@@ -449,20 +460,16 @@ element_status parse_selector(struct token* first_token, struct element* selecto
         switch (token->type) {
         case token_bracket_start:
         case token_parentheses_start:
-            if (bracket) {
-                error->message = "nested paretheses";
-                error->token = token;
-                return element_error;
-            }
-            bracket = token;
+            brackets[brackets_number++] = token;
             break;
         case token_bracket_end:
         case token_parentheses_end:
-            if (!bracket) {
+            if (brackets_number == 0) {
                 error->message = "unmatched bracket";
                 error->token = token;
                 return element_error;
             }
+            struct token* bracket = brackets[--brackets_number];
             if ((token->type == token_bracket_end && bracket->type != token_bracket_start) ||
                 (token->type == token_parentheses_end && bracket->type != token_parentheses_start)) {
                 error->message = "invalid closing bracket";
@@ -477,13 +484,19 @@ element_status parse_selector(struct token* first_token, struct element* selecto
         case token_greater_than:
         case token_identifier:
         case token_string:
+        case token_tilda:
+        case token_caret:
+        case token_asterisk:
+        case token_number:
+        case token_percent:
+        case token_plus:
             break;
         case token_space:
         case token_comment:
             token = token->next;
             continue;
         default:
-            if (!bracket) {
+            if (brackets_number == 0) {
                 error->message = "unexpected token while parsing selector";
                 error->token = token;
                 return element_error;
@@ -765,6 +778,7 @@ element_status parse_at_rule(struct token* first_token, struct element* at_rule,
 
 element_status parse_elements(struct token* first_token, struct element** first_element, struct syntax_error* error) {
     struct element* element = 0;
+    size_t elements_number = 0;
 
     struct token* token = first_token;
 
@@ -792,10 +806,12 @@ element_status parse_elements(struct token* first_token, struct element** first_
         case token_hash:
         case token_identifier:
         case token_colon:
+        case token_asterisk:
+        case token_bracket_start:
             result = parse_rule_set(token, element, error);
             break;
         default:
-            error->message = "unexpected token";
+            error->message = "unexpected token, expected at rule or rule set";
             error->token = token;
             element_free(*first_element);
             return element_error;
@@ -806,6 +822,8 @@ element_status parse_elements(struct token* first_token, struct element** first_
         }
 
         token = element->end->next;
+
+        elements_number++;
 
         skip_spaces_and_comments(&token);
     }

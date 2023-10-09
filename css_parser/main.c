@@ -45,6 +45,9 @@ void print_error(char const* source, size_t pos, size_t length, char const* mess
 
     size_t error_log_start_pos = (pos - line_start_i) < 16 ? line_start_i : pos - 16;
     size_t error_log_end_pos = strstr(&source[error_log_start_pos], "\n") - source;
+    if ((error_log_end_pos - error_log_start_pos) > 80) {
+        error_log_end_pos = error_log_start_pos + 80;
+    }
 
     printf("%zu:%zu\n%s\n", line_number, pos - line_start_i, message);
     for (size_t i = error_log_start_pos; i < error_log_end_pos; i++) {
@@ -137,7 +140,7 @@ int parse_command_line(int argc, char* argv[], struct options* options) {
 int main(int argc, char* argv[]) {
     struct options options = {0, 0, 0, 0, -1};
     #ifdef DEBUG
-    options.file_path = "d:/projects/atribut-local/wp-content/themes/woodmart/style.min.css";
+    options.file_path = "d:/projects/atribut-local/wp-content/themes/woodmart/style.css";
     options.print_elements = true;
     #else
     parse_command_line(argc, argv, &options);
@@ -158,7 +161,7 @@ int main(int argc, char* argv[]) {
         size_t file_size = ftell(file);
         rewind(file);
 
-        source = malloc(file_size + 1);
+        source = calloc(file_size + 1, sizeof(char));
         fread(source, 1, file_size, file);
         source[file_size] = 0;
 
@@ -183,16 +186,17 @@ int main(int argc, char* argv[]) {
             puts("Lexical analysis successful...");
         }
 
-        // struct syntax_error syntax_error;
-        // enum element_status syntax_result = parse_elements(first_token, &first_element, &syntax_error);
+        struct syntax_error syntax_error;
+        enum element_status syntax_result = parse_elements(tokens, &first_element, &syntax_error);
 
-        // if (syntax_result != element_found) {
-        //     printf("Syntax error while parsing file \"%s\":", options.file_path);
-        //     print_error(source, syntax_error.token->pointer - source, syntax_error.token->length, syntax_error.message);
-        //     return 1;
-        // } else {
-        //     puts("Syntax analysis successful...");
-        // }
+        if (syntax_result != element_found) {
+            printf("Problem with token \"%s\":\n", token_names[syntax_error.token->type]);
+            printf("Syntax error while parsing file \"%s\":", options.file_path);
+            print_error(source, syntax_error.token->pointer - source, syntax_error.token->length, syntax_error.message);
+            return 1;
+        } else {
+            puts("Syntax analysis successful...");
+        }
     } else {
         print_help();
         return 1;

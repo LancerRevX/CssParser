@@ -12,7 +12,11 @@ void free_tokens(struct token* token) {
 }
 
 void token_set_string(struct token* token, char const* source, size_t length) {
-    char* string = calloc(length + 1, sizeof(char));
+    char* string = malloc(length + 1);
+    if (!string) {
+        puts("Failed to allocate memory!");
+        exit(1);
+    }
     strncpy(string, source, length);
     string[length] = 0;
     token->string = string;
@@ -60,13 +64,16 @@ token_status get_space_token(struct token* token, char const* source, size_t pos
     size_t i = pos;
     char current_char;
     while ((current_char = source[i]) != 0) {
-        if (current_char == ' ' || current_char == '\n' || current_char == '\t') {
+        switch (current_char) {
+        case ' ':
+        case '\n':
+        case '\t':
+        case '\r':
             space_length++;
             i++;
             continue;
-        } else {
-            break;
         }
+        break;
     }
 
     if (space_length == 0) {
@@ -172,7 +179,15 @@ token_status get_number_token(struct token* token, char const* source, size_t po
     size_t number_length = 0;
     size_t after_dot_length = 0;
     bool dot = false;
+    bool minus = false;
     char current_char;
+
+    if (source[i] == '-') {
+        minus = true;
+        number_length ++;
+        i++;
+    }
+
     while ((current_char = source[i]) != 0) {
         if (isdigit(current_char)) {
             if (dot) {
@@ -183,7 +198,7 @@ token_status get_number_token(struct token* token, char const* source, size_t po
             continue;
         }
 
-        if (!dot && number_length > 0 && current_char == '.') {
+        if (!dot && current_char == '.') {
             dot = true;
             number_length++;
             i++;
@@ -194,6 +209,14 @@ token_status get_number_token(struct token* token, char const* source, size_t po
     }
 
     if (number_length == 0) {
+        return token_not_found;
+    }
+
+    if (number_length == 1 && dot) {
+        return token_not_found;
+    }
+
+    if (number_length == 2 && dot && minus) {
         return token_not_found;
     }
 
@@ -247,9 +270,9 @@ token_status get_token(struct token* token, char const* source, size_t pos, stru
         get_space_token,
         get_comment_token,
         get_identifier_token,
-        get_single_char_token,
         get_number_token,
         get_string_token,
+        get_single_char_token,
         0};
 
     for (size_t i = 0;; i++) {
@@ -279,9 +302,10 @@ token_status parse_tokens(struct token* tokens, size_t* tokens_number, char cons
     size_t source_i = 0;
     size_t token_i = 0;
     size_t log_i = log_treshold;
+    struct token* token = &tokens[token_i];
     while (source_i < source_len) {
-        struct token* token = &tokens[token_i];
-
+        token->next = &tokens[token_i];
+        token = token->next;
         switch (get_token(token, source, source_i, error)) {
         case token_found:
             source_i += token->length;
@@ -302,6 +326,7 @@ token_status parse_tokens(struct token* tokens, size_t* tokens_number, char cons
             return token_error;
         }
     }
+    token->next = 0;
     *tokens_number = token_i;
 
     return token_found;

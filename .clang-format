@@ -6,3 +6,4 @@ ColumnLimit: 0
 # AllowShortIfStatementsOnASingleLine: Never
 AlignAfterOpenBracket: BlockIndent
 # BinPackParameters: true
+SortIncludes: Never

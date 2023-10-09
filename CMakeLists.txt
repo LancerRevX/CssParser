@@ -17,7 +17,7 @@ add_compile_options(-Wall
                     -Wno-error=unused-but-set-variable 
                     -Wno-error=unused-parameter 
                     -Wno-error=unused-variable 
-                    -O1)
+                    )
 
 add_subdirectory(tests)
 
