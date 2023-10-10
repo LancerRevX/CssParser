@@ -369,7 +369,7 @@ element_status parse_declaration_block(struct token* first_token, struct element
 
     if (!token || token->type != token_block_start) {
         error->message = "declaration block must start with \"{\"";
-        error->token = token;
+        error->token = token ? token : first_token;
         return element_error;
     }
 
@@ -562,6 +562,12 @@ element_status parse_rule_set(struct token* first_token, struct element* rule_se
 
     skip_spaces_and_comments(&token);
 
+    if (!token) {
+        error->message = "expected selector list";
+        error->token = first_token;
+        return element_error;
+    }
+
     struct element* selector_list = malloc(sizeof(struct element));
     element_status selector_list_result = parse_selector_list(token, selector_list, error);
     if (selector_list_result != element_found) {
@@ -570,8 +576,16 @@ element_status parse_rule_set(struct token* first_token, struct element* rule_se
     }
     element_add_child(rule_set, selector_list);
     rule_set->start = selector_list->start;
-
     token = selector_list->end->next;
+
+    skip_spaces_and_comments(&token);
+
+    if (!token) {
+        error->message = "expected declaration block";
+        error->token = first_token;
+        return element_error;
+    }
+
     struct element* declaration_block = malloc(sizeof(struct element));
     element_status declaration_block_result = parse_declaration_block(token, declaration_block, error);
     if (declaration_block_result != element_found) {
@@ -777,6 +791,11 @@ element_status parse_at_rule(struct token* first_token, struct element* at_rule,
 }
 
 element_status parse_elements(struct token* first_token, struct element** first_element, struct syntax_error* error) {
+    if (!first_token) {
+        fprintf(stderr, "got empty token list");
+        exit(1); // panic!
+    }
+
     struct element* element = 0;
     size_t elements_number = 0;
 
@@ -860,5 +879,20 @@ void print_vars(struct element* element) {
 
     for (struct element* child = element->first_child; child; child = child->next) {
         print_vars(child);
+    }
+}
+
+void get_vars(struct element* first_element, struct element* vars[], size_t* var_i) {
+    for (struct element* element = first_element; element; element = element->next) {
+        if (element->type == element_declaration) {
+            char const* property_source = element->first_child->start->pointer;
+            if (strncmp(property_source, "--", 2) == 0) {
+                vars[*var_i] = element;
+                (*var_i) ++;
+            }
+            continue;
+        }
+
+        get_vars(element->first_child, vars, var_i);
     }
 }

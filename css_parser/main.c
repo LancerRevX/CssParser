@@ -76,6 +76,12 @@ void print_error(char const* source, size_t pos, size_t length, char const* mess
     printf("\n");
 }
 
+int compare_vars(void const* _left, void const* _right) {
+    struct element* left = *((struct element**) _left);
+    struct element* right = *((struct element**) _right);
+    return strcmp(left->first_child->start->string, right->first_child->start->string);
+}
+
 struct options {
     char const* file_path;
     char const* project_path;
@@ -83,6 +89,7 @@ struct options {
     bool print_elements;
     bool print_tokens;
     int filter_tokens;
+    bool print_vars;
 };
 
 static struct option longopts[] = {
@@ -90,6 +97,7 @@ static struct option longopts[] = {
     {"project-path", required_argument, 0, 'p'},
     {"print-elements", no_argument, 0, 'e'},
     {"print-tokens", optional_argument, 0, 't'},
+    {"print-vars", no_argument, 0, 'v'},
 };
 
 void print_help() {
@@ -129,6 +137,9 @@ int parse_command_line(int argc, char* argv[], struct options* options) {
         case 'e':
             options->print_elements = true;
             break;
+        case 'v':
+        options->print_vars = true;
+        break;
         default:
             print_help();
             return 1;
@@ -138,31 +149,35 @@ int parse_command_line(int argc, char* argv[], struct options* options) {
 }
 
 int main(int argc, char* argv[]) {
-    struct options options = {0, 0, 0, 0, -1};
-    #ifdef DEBUG
+    struct options options = {0, 0, 0, 0, -1, 0};
+#ifdef DEBUG
     options.file_path = "d:/projects/atribut-local/wp-content/themes/woodmart/style.css";
-    options.print_elements = true;
-    #else
+    options.print_vars = true;
+#else
     parse_command_line(argc, argv, &options);
-    #endif
+#endif
 
     FILE* file;
     struct token* tokens;
     struct element* first_element = 0;
+    size_t elements_number = 0;
     size_t tokens_number;
     char* source;
     if (options.file_path) {
-        file = fopen(options.file_path, "r");
+        file = fopen(options.file_path, "rb");
         if (!file) {
             printf("Couldn't open file \"%s\"", options.file_path);
             return 1;
         }
-        fseek(file, 0L, SEEK_END);
+        if (fseek(file, 0L, SEEK_END) != 0) {
+            puts("fseek error");
+            exit(1);
+        }
         size_t file_size = ftell(file);
         rewind(file);
 
         source = calloc(file_size + 1, sizeof(char));
-        fread(source, 1, file_size, file);
+        fread(source, sizeof(char), file_size, file);
         source[file_size] = 0;
 
         printf("Parsing file \"%s\"...\n", options.file_path);
@@ -193,6 +208,7 @@ int main(int argc, char* argv[]) {
             printf("Problem with token \"%s\":\n", token_names[syntax_error.token->type]);
             printf("Syntax error while parsing file \"%s\":", options.file_path);
             print_error(source, syntax_error.token->pointer - source, syntax_error.token->length, syntax_error.message);
+
             return 1;
         } else {
             puts("Syntax analysis successful...");
@@ -207,7 +223,7 @@ int main(int argc, char* argv[]) {
         for (size_t i = 0; i < tokens_number; i++) {
             struct token* token = &tokens[i];
 
-            if (options.filter_tokens && token->type != (enum token_type) options.filter_tokens) {
+            if (options.filter_tokens && token->type != (enum token_type)options.filter_tokens) {
                 continue;
             }
 
@@ -224,6 +240,20 @@ int main(int argc, char* argv[]) {
             calculate_file_pos(source, element->start->pointer - source, &file_pos);
             printf("%s:%zu:%zu\t\"%s\"\t\t\"%s\"\n", options.file_path, file_pos.line, file_pos.line_pos, element_name[element->type], element->start->string);
         }
+    }
+
+    if (options.print_vars) {
+        struct element** vars = calloc(10000, sizeof(struct element));
+        size_t var_i = 0;
+        get_vars(first_element, vars, &var_i);
+        qsort(vars, var_i, sizeof(struct element*), compare_vars);
+        printf("Found %zu vars:\n", var_i);
+        for (size_t i = 0; i < var_i; i++) {
+            struct file_pos file_pos;
+            calculate_file_pos(source, vars[i]->start->pointer - source, &file_pos);
+            printf("%zu: %s:%zu:%zu === ", i, options.file_path, file_pos.line, file_pos.line_pos);
+            declaration_print(vars[i]);
+        }        
     }
 
     return 0;

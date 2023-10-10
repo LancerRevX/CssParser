@@ -12,6 +12,7 @@ void free_tokens(struct token* token) {
 }
 
 void token_set_string(struct token* token, char const* source, size_t length) {
+    token->source = source;
     char* string = malloc(length + 1);
     if (!string) {
         puts("Failed to allocate memory!");

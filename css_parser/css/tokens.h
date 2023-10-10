@@ -102,6 +102,7 @@ static char const* const token_names[] = {
 
 typedef struct token {
     enum token_type type;
+    const char* source;
     const char* pointer;
     const char* string;
     size_t length;
